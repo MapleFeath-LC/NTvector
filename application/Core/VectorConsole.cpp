@@ -249,19 +249,39 @@ void WriteRowRuns(int row, const std::vector<Cell>& line) {
 }
 
 // ------------------------------------------------------------------ geometry
-void QueryGeometry() {
+// Returns true when the console viewport had to be pinned back to the origin.
+bool QueryGeometry() {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (!GetConsoleScreenBufferInfo(g_hOut, &csbi)) return;
+    if (!GetConsoleScreenBufferInfo(g_hOut, &csbi)) return false;
+
+    // If SetConsoleScreenBufferSize could not shrink the buffer down to the
+    // window, the console keeps native scrollback and the user can move the
+    // viewport with the wheel or the scrollbar. Our drawing is viewport-relative,
+    // so a moved viewport leaves the previous frame sitting in the buffer and
+    // scrolling reveals a mess of leftover fragments. Pin the viewport back to
+    // the origin every frame; the continuous repaint then erases the leftovers.
+    bool pinned = false;
+    if (csbi.srWindow.Top != 0 || csbi.srWindow.Left != 0) {
+        SHORT w = (SHORT)(csbi.srWindow.Right - csbi.srWindow.Left + 1);
+        SHORT h = (SHORT)(csbi.srWindow.Bottom - csbi.srWindow.Top + 1);
+        SMALL_RECT win = { 0, 0, (SHORT)(w - 1), (SHORT)(h - 1) };
+        if (SetConsoleWindowInfo(g_hOut, TRUE, &win)) {
+            if (!GetConsoleScreenBufferInfo(g_hOut, &csbi)) {
+                csbi.srWindow.Left = 0; csbi.srWindow.Top = 0;
+                csbi.srWindow.Right = (SHORT)(w - 1);
+                csbi.srWindow.Bottom = (SHORT)(h - 1);
+            }
+            pinned = true;
+        }
+    }
+
     g_width = csbi.srWindow.Right - csbi.srWindow.Left + 1;
     g_height = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-    // Position everything relative to the visible viewport. If the buffer could
-    // not be shrunk to the window (SetConsoleScreenBufferSize can fail, leaving
-    // a 9001-line buffer with the viewport at the bottom), absolute row 0 would
-    // be far above the visible area and nothing would appear on screen.
     g_viewLeft = csbi.srWindow.Left;
     g_viewTop = csbi.srWindow.Top;
     if (g_uiRows > g_height - 2) g_uiRows = (g_height > 3) ? g_height - 2 : 1;
     if (g_uiRows < 1) g_uiRows = 1;
+    return pinned;
 }
 
 void ClampScroll() {
@@ -309,6 +329,35 @@ void FullRedraw() {
 }
 
 // ------------------------------------------------------------------ input
+bool g_mouseCapture = false;
+
+// Mouse-wheel scrolling and the console's native QuickEdit selection are
+// mutually exclusive: ENABLE_MOUSE_INPUT hands the mouse to this process, so the
+// console host stops doing drag-select + right-click copy. Keeping QuickEdit
+// (the default) is what makes "select text and copy" work; --mouse-scroll opts
+// into wheel scrolling instead, and F7 toggles between the two at runtime.
+// Writes a raw VT sequence (used for the alternate-screen switch).
+void WriteConsoleSeq(const wchar_t* seq) {
+    if (g_hOut == INVALID_HANDLE_VALUE || seq == nullptr) return;
+    size_t n = 0;
+    while (seq[n]) ++n;
+    DWORD written = 0;
+    WriteConsoleW(g_hOut, seq, (DWORD)n, &written, nullptr);
+}
+
+void ApplyInputMode(bool mouseCapture) {
+    if (!g_savedInModeOk || g_hIn == INVALID_HANDLE_VALUE) return;
+    DWORD m = g_savedInMode | ENABLE_WINDOW_INPUT;
+    if (mouseCapture) {
+        m &= ~ENABLE_QUICK_EDIT_MODE;
+        m |= ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT;
+    } else {
+        m &= ~ENABLE_MOUSE_INPUT;
+    }
+    SetConsoleMode(g_hIn, m);
+    g_mouseCapture = mouseCapture;
+}
+
 void InputLoop() {
     HANDLE hIn = g_hIn;
     while (!g_inputStop.load()) {
@@ -320,8 +369,10 @@ void InputLoop() {
         }
         if (rec.EventType == MOUSE_EVENT &&
             (rec.Event.MouseEvent.dwEventFlags & MOUSE_WHEELED)) {
-            short delta = (short)HIWORD(rec.Event.MouseEvent.dwButtonState);
-            ScrollLog(delta > 0 ? 3 : -3);
+            if (g_mouseCapture) {
+                short delta = (short)HIWORD(rec.Event.MouseEvent.dwButtonState);
+                ScrollLog(delta > 0 ? 3 : -3);
+            }
         } else if (rec.EventType == KEY_EVENT && rec.Event.KeyEvent.bKeyDown) {
             // Scrollback navigation so history is reachable without a mouse.
             int page = LogRows() > 1 ? LogRows() - 1 : 1;
@@ -332,6 +383,12 @@ void InputLoop() {
             case VK_DOWN:  ScrollLog(-1);    break;
             case VK_HOME:  ScrollLog(1 << 20);  break;  // oldest
             case VK_END:   ScrollLog(-(1 << 20)); break; // newest
+            case VK_F7:                                 // toggle mouse capture
+                ApplyInputMode(!g_mouseCapture);
+                AppendLog(g_mouseCapture
+                    ? "[UI] mouse wheel scrolling ON  - hold Shift to select/copy text"
+                    : "[UI] mouse wheel scrolling OFF - drag to select, right-click to copy");
+                break;
             default: break;
             }
         } else if (rec.EventType == WINDOW_BUFFER_SIZE_EVENT) {
@@ -471,7 +528,7 @@ bool Active() {
 #endif
 }
 
-bool Init(int uiRows) {
+bool Init(int uiRows, bool mouseScroll) {
 #ifdef _WIN32
     // Open our OWN console handles. StartStdoutCapture() below calls _dup2() to
     // point fd 1/2 at a pipe, and the CRT closes the handle that fd 1 wrapped --
@@ -497,20 +554,41 @@ bool Init(int uiRows) {
     g_uiRows = uiRows > 0 ? uiRows : 14;
     SetupOutput();
 
+    // Switch to the alternate screen buffer -- what full-screen TUI apps do.
+    // Windows Terminal keeps its OWN scrollback, independent of the console
+    // screen buffer: shrinking the buffer and pinning the viewport (both of
+    // which we already do) does NOT stop the wheel from scrolling back through
+    // every frame we have painted, which shows up as a stack of leftover header
+    // fragments. The alternate screen has no scrollback at all, so scrolling
+    // cannot reveal anything; log history lives in our own log pane instead.
+    WriteConsoleSeq(L"\x1b[?1049h");
+
     // Make the buffer exactly the window height so the console never scrolls on
     // its own -- the header must stay pinned and only the log pane may move.
+    // SetConsoleScreenBufferSize refuses to shrink below the window, so first
+    // grow if needed, then move the window to the origin, then shrink.
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (GetConsoleScreenBufferInfo(g_hOut, &csbi)) {
         SHORT winW = csbi.srWindow.Right - csbi.srWindow.Left + 1;
         SHORT winH = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+
+        SHORT wantW = (SHORT)(winW + 1);
+        if (csbi.dwSize.X < wantW || csbi.dwSize.Y < winH) {
+            COORD grow = { (SHORT)(csbi.dwSize.X < wantW ? wantW : csbi.dwSize.X),
+                           (SHORT)(csbi.dwSize.Y < winH ? winH : csbi.dwSize.Y) };
+            SetConsoleScreenBufferSize(g_hOut, grow);
+        }
+
         SMALL_RECT win = { 0, 0, (SHORT)(winW - 1), (SHORT)(winH - 1) };
         SetConsoleWindowInfo(g_hOut, TRUE, &win);
+
         // One column wider than the window. Writing the last *visible* column
         // then leaves the cursor inside the buffer instead of wrapping to the
         // next line (which would scroll the whole screen). With that safety we
         // can paint every visible cell, so no stale characters survive in the
-        // rightmost column.
-        COORD buf = { (SHORT)(winW + 1), winH };
+        // rightmost column. If the shrink still fails, QueryGeometry() pins the
+        // viewport every frame so native scrollback cannot smear the UI.
+        COORD buf = { wantW, winH };
         SetConsoleScreenBufferSize(g_hOut, buf);
     }
     QueryGeometry();
@@ -531,15 +609,13 @@ bool Init(int uiRows) {
         FillConsoleOutputAttribute(g_hOut, 7, clearW, c, &written);
     }
 
-    // Mouse wheel + resize events.
+    // Input: keyboard scrollback always; mouse-wheel scrolling is opt-in because
+    // capturing the mouse disables the console's own drag-select + copy.
     DWORD inMode = 0;
     if (g_hIn != INVALID_HANDLE_VALUE && GetConsoleMode(g_hIn, &inMode)) {
         g_savedInMode = inMode;
         g_savedInModeOk = true;
-        // Quick-edit must be off or mouse events are swallowed by text selection.
-        inMode &= ~ENABLE_QUICK_EDIT_MODE;
-        inMode |= ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT;
-        SetConsoleMode(g_hIn, inMode);
+        ApplyInputMode(mouseScroll);
         g_inputStop = false;
         g_inputThread = std::thread(InputLoop);
     }
@@ -552,6 +628,7 @@ bool Init(int uiRows) {
     return true;
 #else
     (void)uiRows;
+    (void)mouseScroll;
     g_uiRows = uiRows > 0 ? uiRows : 14;
     return false;
 #endif
@@ -584,6 +661,8 @@ void Shutdown() {
         SetConsoleCursorPosition(g_hOut, origin);
     }
     g_tuiActive = false;
+    // Leave the alternate screen (must happen while VT processing is still on).
+    WriteConsoleSeq(L"\x1b[?1049l");
     RestoreOutput();
 #endif
 }
@@ -613,15 +692,20 @@ void Present(const std::string& ansiFrame) {
         std::fflush(stdout);
         return;
     }
-    QueryGeometry();
+    bool pinned = QueryGeometry();
     Grid g = ParseFrame(ansiFrame);
-    std::lock_guard<std::mutex> wlock(g_writeMutex);
-    ++g_framesDrawn;
-    for (int r = 0; r < g.rows; ++r) {
-        std::vector<Cell> line(g.cells.begin() + (size_t)r * g.cols,
-                               g.cells.begin() + (size_t)(r + 1) * g.cols);
-        WriteRowRuns(r, line);
+    {
+        std::lock_guard<std::mutex> wlock(g_writeMutex);
+        ++g_framesDrawn;
+        for (int r = 0; r < g.rows; ++r) {
+            std::vector<Cell> line(g.cells.begin() + (size_t)r * g.cols,
+                                   g.cells.begin() + (size_t)(r + 1) * g.cols);
+            WriteRowRuns(r, line);
+        }
     }
+    // After re-pinning, rows below the header may still hold fragments from the
+    // old viewport position, so repaint the pane too (outside the write lock).
+    if (pinned) RedrawLogPane();
 #else
     std::fwrite(ansiFrame.data(), 1, ansiFrame.size(), stdout);
     std::fflush(stdout);

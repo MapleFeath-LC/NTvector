@@ -27,7 +27,9 @@ bool SetupOutput();      // UTF-8 code page + ENABLE_VIRTUAL_TERMINAL_PROCESSING
 void RestoreOutput();    // restores the previous code page and mode
 
 // --- two-region TUI --------------------------------------------------------
-bool Init(int uiRows);   // capture the console, reserve the header region
+// mouseScroll: opt into capturing the mouse for wheel scrolling. Off by default
+// because capturing the mouse disables the console's own drag-select + copy.
+bool Init(int uiRows, bool mouseScroll = false);
 void Shutdown();
 bool Active();           // true when the TUI owns the console
 bool IsConsole();        // true when stdout is a real console

@@ -394,13 +394,13 @@ const char* StateName(State s) {
 }
 
 // ----------------------------------------------------------------- lifecycle
-bool ConsoleInit() {
+bool ConsoleInit(bool mouseScroll) {
     // Captures the console, reserves the fixed header region, and installs the
     // std::cout sink so log text lands in the pane below instead of being
     // written over the animated header. Returns false when there is no real
     // console (stdout redirected/absent) so the caller can skip the UI rather
     // than emit raw escape codes into the output stream.
-    if (!VectorConsole::Init(14)) return false;  // 14 rows = box frame height
+    if (!VectorConsole::Init(14, mouseScroll)) return false;  // 14 rows = box height
     VectorConsole::InstallLoggerSink();
     return true;
 }

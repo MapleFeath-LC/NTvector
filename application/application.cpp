@@ -100,6 +100,7 @@ int main(int argc, char* argv[])
     bool _config_ctx_start_host_game = false;
     bool _nt_sdk_start = false;
     bool _ui = true;    // terminal UI is ON by default; --no-ui turns it off
+    bool _mouseScroll = false;  // --mouse-scroll: capture mouse for wheel scrolling
     std::string event_name;
     std::string config_file = "mc.cfg";
     std::string skin_data_path = "";
@@ -141,6 +142,11 @@ int main(int argc, char* argv[])
             }
             if (parm[i] == "--no-ui") {
                 _ui = false;
+            }
+            if (parm[i] == "--mouse-scroll") {
+                // 滚轮翻日志。默认关闭：开启后会占用鼠标，控制台自带的
+                // 拖拽选中 + 右键复制会失效（运行中可按 F7 切换）。
+                _mouseScroll = true;
             }
             if (parm[i] == "--auto_auth_input") {
                 Params::AutoAuthInput = true;
@@ -295,7 +301,7 @@ int main(int argc, char* argv[])
 			// goes to fd 1 regardless of settings. The program's own Logger is
 			// NOT forced on: it stays governed by --logger, so without that flag
 			// no program log lines appear in the pane.
-			if (VectorUI::ConsoleInit()) {
+			if (VectorUI::ConsoleInit(_mouseScroll)) {
 				VectorUI::Start(30);
 				// Many exit paths below (exit(0) / infinite loops); make sure
 				// the render thread is joined and the console restored.

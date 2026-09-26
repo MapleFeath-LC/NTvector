@@ -41,7 +41,9 @@ const char* StateName(State s);
 // Takes over the console: fixed header region + log pane. Returns false when
 // there is no real console (stdout redirected), in which case the caller must
 // not start the UI.
-bool ConsoleInit();
+// mouseScroll: capture the mouse for wheel scrolling. Default false so the
+// console's own drag-select and right-click copy keep working (F7 toggles it).
+bool ConsoleInit(bool mouseScroll = false);
 void ConsoleShutdown();
 
 // Starts the render thread (no-op if already running).
