@@ -51,3 +51,7 @@ __pycache__/
 
 # Archives
 *.zip
+
+# Local build output folder (build_release.ps1)
+dist/
+ui_diag.txt

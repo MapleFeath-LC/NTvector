@@ -43,7 +43,9 @@ add_definitions(-D_RETAIL)
 
 IF(WIN32 AND NOT UNIX)
 	add_definitions(-DWIN32 -D_RAKNET_DLL -D_CRT_NONSTDC_NO_DEPRECATE -D_CRT_SECURE_NO_DEPRECATE)
-	SET( CMAKE_CXX_FLAGS "/GS- /GR-" )
+	IF(MSVC)
+		SET( CMAKE_CXX_FLAGS "/GS- /GR-" )
+	ENDIF(MSVC)
 ELSE(WIN32 AND NOT UNIX)
 	set_target_properties(SLikeNetLibStatic PROPERTIES
 		OUTPUT_NAME "slikenet"
@@ -51,10 +53,10 @@ ELSE(WIN32 AND NOT UNIX)
 ENDIF(WIN32 AND NOT UNIX)
 
 target_link_libraries(SLikeNetLibStatic ${SLIKENET_LIBRARY_LIBS})
-IF(WIN32 AND NOT UNIX)
-	IF(NOT ${CMAKE_GENERATOR} STREQUAL "MSYS Makefiles")
+	IF(WIN32 AND NOT UNIX)
+	IF(MSVC)
 		set_target_properties(SLikeNetLibStatic PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB:\"LIBCD.lib LIBCMTD.lib MSVCRT.lib\"" )
-	ENDIF(NOT ${CMAKE_GENERATOR} STREQUAL "MSYS Makefiles")
+	ENDIF(MSVC)
 ELSE(WIN32 AND NOT UNIX)
 	configure_file(../../slikenet-config-version.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/slikenet-config-version.cmake @ONLY)
 

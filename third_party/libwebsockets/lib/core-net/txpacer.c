@@ -25,6 +25,7 @@
 #include "private-lib-core.h"
 
 #if defined(LWS_HAVE_PTHREAD_H)
+#include <pthread.h>
 #if !defined(LWS_PLAT_OPTEE) && !defined(LWS_PLAT_BAREMETAL) && !defined(LWS_PLAT_FREERTOS)
 
 struct lws_txp {

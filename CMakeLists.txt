@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
+# MinGW on Windows misparses CMake's include response files when the project
+# contains the legacy SLikeNet subproject. Keep include flags expanded.
+set(CMAKE_CXX_USE_RESPONSE_FILE_FOR_INCLUDES OFF CACHE BOOL "" FORCE)
 # SLikeNet 和 zlib 的 CMakeLists.txt 声明了很旧的 cmake_minimum_required(VERSION 2.6)
 # CMake 4.x 不再兼容 < 3.5，设置此变量让它们能正常工作
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 project(Program LANGUAGES C CXX)
+enable_testing()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,3 +41,4 @@ add_subdirectory(application/include/SLikeNet-master EXCLUDE_FROM_ALL)
 # 主项目
 # ============================================================
 add_subdirectory(application)
+add_subdirectory(tools EXCLUDE_FROM_ALL)

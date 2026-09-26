@@ -34,6 +34,8 @@
 #include "ClientInstance.h"
 #include "MPayWrapper.h"
 #include "MinecraftClientDataUtils.h"
+#include "VectorUI.h"
+#include "VectorConsole.h"
 //#include "NewLogger.h"
 /*
    Json::FastWriter write;
@@ -86,10 +88,18 @@ void LogHookCallback(const char* message) {
 
 int main(int argc, char* argv[])
 {
+    // Put the console into UTF-8 + VT mode before anything is logged. The
+    // project builds with /utf-8, so narrow literals are UTF-8 bytes, and the
+    // Logger emits ANSI colour codes that must be interpreted rather than
+    // printed literally as "[0m".
+    VectorConsole::SetupOutput();
+    atexit(VectorConsole::RestoreOutput);
+
     //config__INIT
     bool _start_nethernet = false;
     bool _config_ctx_start_host_game = false;
     bool _nt_sdk_start = false;
+    bool _ui = true;    // terminal UI is ON by default; --no-ui turns it off
     std::string event_name;
     std::string config_file = "mc.cfg";
     std::string skin_data_path = "";
@@ -125,6 +135,12 @@ int main(int argc, char* argv[])
 			}
             if (parm[i] == "--logger") {
                 Params::logger = true;
+            }
+            if (parm[i] == "--ui") {
+                _ui = true;         // still accepted; UI is on by default
+            }
+            if (parm[i] == "--no-ui") {
+                _ui = false;
             }
             if (parm[i] == "--auto_auth_input") {
                 Params::AutoAuthInput = true;
@@ -263,6 +279,62 @@ int main(int argc, char* argv[])
 			if (Params::logger) {
 				Logger::getInstance().initialize();
 				//rtc::InitLogger(rtc::LogLevel::Debug);
+			}
+		}
+		// --ui-demo previews the three states without connecting to a server,
+		// so the animation and the fixed-header / scrollable-pane layout can be
+		// verified standalone.
+		bool _uiDemo = false;
+		for (const auto& s : Params::params) {
+			if (s == "--ui-demo") { _uiDemo = true; _ui = true; }
+		}
+
+		if (_ui) {
+			// The log pane shows whatever the program writes to stdout/stderr --
+			// in particular the Python plugins' print() output, which always
+			// goes to fd 1 regardless of settings. The program's own Logger is
+			// NOT forced on: it stays governed by --logger, so without that flag
+			// no program log lines appear in the pane.
+			if (VectorUI::ConsoleInit()) {
+				VectorUI::Start(30);
+				// Many exit paths below (exit(0) / infinite loops); make sure
+				// the render thread is joined and the console restored.
+				atexit([]() { VectorUI::Stop(); VectorUI::ConsoleShutdown(); });
+			} else {
+				_ui = false;   // no real console (redirected): run without the UI
+			}
+		}
+
+		if (_uiDemo) {
+			Params::logger = true;
+			Logger::getInstance().initialize();
+			auto t0 = std::chrono::steady_clock::now();
+			int lastPhase = -1, lastSecond = -1;
+			while (true) {
+				int secs = (int)std::chrono::duration_cast<std::chrono::seconds>(
+					std::chrono::steady_clock::now() - t0).count();
+				int phase = (secs / 5) % 3;   // 5 seconds per state
+				if (phase != lastPhase) {
+					lastPhase = phase;
+					VectorUI::TaskReset();
+					if (phase == 1) {
+						VectorUI::TaskBegin();
+						VectorUI::TaskBegin();          // 2 tasks -> Busy
+					}
+					else if (phase == 2) {
+						for (int i = 0; i < 3; ++i) VectorUI::TaskBegin();   // >=3 -> Portal
+					}
+				}
+				if (secs != lastSecond) {
+					lastSecond = secs;
+					LOG(LOG_INFO, "[Demo] t=", secs, "s  state=", VectorUI::StateName(VectorUI::CurrentState()),
+						"  tasks=", VectorUI::ActiveTasks());
+					// Periodically dump the real console state (with a screen
+					// readback) so the layout can be verified even when the
+					// window cannot be observed directly.
+					if ((secs % 3) == 0) VectorConsole::DumpDiagnostics("ui_diag.txt");
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 			}
 		}
 		Logger::getInstance().log_("[Device Lost] The graphics context was gained", LOG_WARN);
@@ -456,7 +528,8 @@ int main(int argc, char* argv[])
             }
             else {
                 LOG(LOG_ERROR, "[Main] Authentication failed");
-                // 认证失败不阻塞：用本地自签会话继续连接（老客户端行为，token 直连房间服务器）
+                // Auth failure is non-blocking: fall back to a local self-signed session
+                // and connect directly to the room server (legacy client behaviour).
                 LOG(LOG_WARN, "[Main] Falling back to local session and connecting directly...");
                 LoginSession localSession = LoginAuth::LoginLocal(
                     Pair.DisplayName, Pair.UserID, client_data);

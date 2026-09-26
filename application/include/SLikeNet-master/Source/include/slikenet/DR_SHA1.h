@@ -172,7 +172,7 @@
 #define SHA1_WIPE_VARIABLES
 #endif
 
-#if defined(SHA1_HAS_TCHAR)
+#if defined(SHA1_HAS_TCHAR) || defined(_WIN32)
 #include <tchar.h>
 #else
 #ifdef _MSC_VER
