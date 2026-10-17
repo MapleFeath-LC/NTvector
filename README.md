@@ -1,5 +1,8 @@
 # NTvector (OPEN_NTVECTOR)
 
+web : https://www.vtbot.cn/
+Official Documentation Link : https://www.vtbot.cn/api-docs/
+
 **NetEase Minecraft Bedrock Edition Bot Client (Vector)** — built in **C++17 with CMake**, embedding **Python 3.12.2** to run plugins (migrated from Python 2.7). Primary platform: **Windows (MSVC)**; Linux x86_64 / Android (Termux) were previously supported (see `docs/`).
 
 All third-party C/C++ dependencies are bundled and compiled from source — **no external package manager or network required at build time**.
