@@ -54,6 +54,10 @@ private:
     void sendSignalingMessage(const std::string& message_payload);
     void startKeepalive();
     void stopKeepalive();
+    // Type=2 doubles as "please send TURN credentials" and as the reply that
+    // carries them, so asking for a fresh set is just another Type=2.
+    void requestTurnConfig();
+    void scheduleTurnCredentialRefresh(int expiration_sec);
     void handleIncomingMessage(const std::string& json_str);
     void handleType2_TurnConfig(const std::string& turn_config_json);
     void handleType1_Signaling(const std::string& from, const std::string& message);
@@ -93,12 +97,41 @@ private:
     OnDataChannelOpen    m_on_dc_open;
     OnDataChannelClose   m_on_dc_close;
 
+    // NetherNet frame reassembly. Every frame on a data channel starts with a
+    // 1-byte "remaining segments" counter that decrements to 0 on the last
+    // frame; a message is only delivered once that 0 arrives.
+    std::mutex m_recv_mutex;
+    std::vector<uint8_t> m_recv_buf;
+    int m_recv_expected = -1;   // next counter value we accept, -1 = idle
+
     bool m_initialized = false;
-    bool m_running = false;
+    // Written from startUp()/shutdown(), read from the keepalive/timeout
+    // threads. A plain bool here was a data race, and it also let the TURN
+    // watchdog bail out immediately when onConnection() ran before the
+    // startUp() store.
+    std::atomic<bool> m_running{ false };
+    // Generation counter so a re-scheduled TURN refresh cancels the old waiter.
+    std::atomic<uint64_t> m_turn_refresh_gen{ 0 };
 
     // timeout constants
     static constexpr int WS_CONNECT_TIMEOUT_MS = 10000;
-    static constexpr int TURN_CONFIG_TIMEOUT_MS = 10000;
+    // The reference client (CDS Launcher SignalingClient.cs, adapted in CDSProxy
+    // as NeteaseNetherNetSignaling) waits 8 s for the TURN payload and then
+    // continues with an empty ICE server list instead of failing the whole
+    // connection: host candidates still connect inside the same LAN, which is
+    // exactly the 本地联机 case.
+    static constexpr int TURN_CONFIG_TIMEOUT_MS = 8000;
+    // Signalling heartbeat period. The reference client sends {"Type":0} every
+    // 50 s (the old code pinged every 10 s and additionally busy-looped a
+    // Type=2 request every 2 s).
+    static constexpr int KEEPALIVE_HEARTBEAT_SEC = 50;
+
+    // Payload bytes per segment when the peer advertises no limit. Vanilla sends
+    // a=max-message-size:262144, which bounds the whole frame, so one segment
+    // carries one byte less than that. 255 segments is the hard ceiling because
+    // the counter is a single byte.
+    static constexpr size_t DEFAULT_MAX_MESSAGE_SIZE = 262143;
+    static constexpr size_t MAX_SEGMENTS = 255;
     static constexpr int CONNECT_RESPONSE_TIMEOUT_MS = 5000;
     static constexpr int WEBRTC_CONNECT_TIMEOUT_MS = 15000;
 

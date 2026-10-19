@@ -10,6 +10,7 @@
 #include <json/json.h>
 #include <rtc/rtc.hpp>
 
+#include <algorithm>
 #include <regex>
 #include <cstring>
 #include <cstdio>
@@ -53,6 +54,20 @@ namespace {
             static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()))
         );
         for (size_t i = 0; i < n; ++i) out[i] = static_cast<uint8_t>(rng() & 0xFF);
+    }
+
+    // Random RFC-4122 v4 GUID, used as the per-message MessageId of Type=1.
+    std::string random_guid() {
+        uint8_t b[16];
+        random_bytes(b, 16);
+        b[6] = static_cast<uint8_t>((b[6] & 0x0F) | 0x40);   // version 4
+        b[8] = static_cast<uint8_t>((b[8] & 0x3F) | 0x80);   // variant 10xx
+        char buf[37];
+        std::snprintf(buf, sizeof(buf),
+            "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+            b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+        return std::string(buf);
     }
 
     bool aes_ecb_128_encrypt_block(const uint8_t key[16],
@@ -147,8 +162,35 @@ bool TanLobbyGameCtx::sendDataChannelMessage(const std::vector<uint8_t>& data) {
     auto dc = m_dc_reliable;
     if (!dc) return false;
 
+    // Segment the message the way NetherNet does: every frame carries a 1-byte
+    // "remaining segments" counter that starts at totalSegments-1 and reaches 0
+    // on the final frame. maxMessageSize() is the peer's advertised limit for a
+    // whole message (RFC 8841), so a frame - counter included - has to stay at
+    // or below it.
+    size_t segment_payload = DEFAULT_MAX_MESSAGE_SIZE;
+    {
+        const size_t peer_max = dc->maxMessageSize();
+        if (peer_max > 1) segment_payload = peer_max - 1;
+    }
+
+    const size_t total = data.empty() ? 0 : (data.size() - 1) / segment_payload + 1;
+    if (total > MAX_SEGMENTS) {
+        LOG(LOG_ERROR, "[TanLobbyGameCtx] message too large: ", data.size(),
+            " bytes needs ", total, " segments, the counter is a single byte");
+        return false;
+    }
+
     try {
-        dc->send(reinterpret_cast<const std::byte*>(data.data()), data.size());
+        int remaining = static_cast<int>(total) - 1;
+        for (size_t offset = 0; offset < data.size(); offset += segment_payload) {
+            const size_t len = std::min(segment_payload, data.size() - offset);
+            std::vector<uint8_t> frame;
+            frame.reserve(1 + len);
+            frame.push_back(static_cast<uint8_t>(remaining));
+            frame.insert(frame.end(), data.begin() + offset, data.begin() + offset + len);
+            dc->send(reinterpret_cast<const std::byte*>(frame.data()), frame.size());
+            --remaining;
+        }
         return true;
     }
     catch (const std::exception& e) {
@@ -171,7 +213,7 @@ void TanLobbyGameCtx::doExit(const char* event_name, int exit_code) {
 void TanLobbyGameCtx::shutdown() {
     LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] shutdown() called");
     m_closing.store(true, std::memory_order_release);
-    m_running = false;
+    m_running.store(false, std::memory_order_release);
     stopKeepalive();
     m_dc_open = false;
 
@@ -216,8 +258,11 @@ void TanLobbyGameCtx::sendSignalingMessage(const std::string& message_payload) {
     uint64_t to_num = std::stoull(m_nethernet_id_to);
     root["To"] = static_cast<Json::UInt64>(to_num);
 
-    root["From"] = m_nethernet_id_from;
     root["Message"] = message_payload;
+    // Per-message GUID. The reference client (CDS Launcher SignalingClient.cs,
+    // mirrored by CDSProxy NeteaseSignalingClient.sendType1) always sends it;
+    // it does NOT send a "From" field on outgoing messages.
+    root["MessageId"] = random_guid();
 
     Json::StreamWriterBuilder b;
     b["indentation"] = "";
@@ -233,7 +278,15 @@ void TanLobbyGameCtx::startKeepalive() {
         LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] keepalive thread started");
         while (true) {
             auto self = weak_self.lock();
-            if (!self || !self->m_keepalive_running.load(std::memory_order_acquire)) break;
+            if (!self) break;
+            // Deliberate stop (shutdown()/disconnect): leave quietly.
+            if (!self->m_keepalive_running.load(std::memory_order_acquire)) break;
+            if (self->m_closing.load(std::memory_order_acquire)) break;
+            // The signalling socket dropped on its own. WebSocketClientImpl
+            // already reports that through onConnection(false) ->
+            // "on_nethernet_ws_closed", so this thread must not raise an event
+            // of its own: it used to fire a bogus "invalid_token" (exit 5) on
+            // every normal shutdown as well.
             if (!self->m_ws_client || !self->m_ws_client->isConnected()) {
                 LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] keepalive: ws closed, exit");
                 break;
@@ -241,21 +294,14 @@ void TanLobbyGameCtx::startKeepalive() {
             int64_t now_sec = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
             if (now_sec >= next_ping_at_sec) {
                 self->sendControlMessage(0);
-                next_ping_at_sec = now_sec + 10;
+                next_ping_at_sec = now_sec + KEEPALIVE_HEARTBEAT_SEC;
             }
-            if (!self->m_received_any.load(std::memory_order_acquire)) {
-                LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] keepalive: no data yet, sending Type=2");
-                self->sendControlMessage(2);
-            }
+            // NOTE: TURN credentials are requested once on connect and then on
+            // the ExpirationInSeconds schedule - never polled from this loop.
             self.reset();
-            std::this_thread::sleep_for(seconds(2));
+            std::this_thread::sleep_for(seconds(5));
         }
         LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] keepalive thread exited");
-
-        auto self = weak_self.lock();
-        if (self) {
-            self->doExit("on_nethernet_invalid_token", EXIT_CODE_WS_Invalid_token);
-        }
         });
 }
 
@@ -264,12 +310,52 @@ void TanLobbyGameCtx::stopKeepalive() {
     if (m_keepalive_thread.joinable()) m_keepalive_thread.join();
 }
 
+void TanLobbyGameCtx::requestTurnConfig() {
+    LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] request TURN config (Type=2)");
+    sendControlMessage(2);
+}
+
+// TURN credentials expire. The server reports ExpirationInSeconds, so ask for a
+// fresh set shortly before that (300 s of headroom, minimum 60 s) - never poll.
+// A newer schedule supersedes the previous waiter through m_turn_refresh_gen.
+void TanLobbyGameCtx::scheduleTurnCredentialRefresh(int expiration_sec) {
+    int refresh_after = expiration_sec - 300;
+    if (refresh_after < 60) refresh_after = 60;
+
+    const uint64_t gen = ++m_turn_refresh_gen;
+    LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] schedule TURN credential refresh in ", refresh_after, "s");
+
+    std::weak_ptr<TanLobbyGameCtx> weak_self = shared_from_this();
+    std::thread([weak_self, gen, refresh_after]() {
+        using namespace std::chrono;
+        const auto deadline = steady_clock::now() + seconds(refresh_after);
+        while (steady_clock::now() < deadline) {
+            auto self = weak_self.lock();
+            if (!self) return;
+            if (self->m_turn_refresh_gen.load(std::memory_order_acquire) != gen) return;
+            if (self->m_closing.load(std::memory_order_acquire)) return;
+            if (!self->m_running.load(std::memory_order_acquire)) return;
+            self.reset();
+            std::this_thread::sleep_for(milliseconds(500));
+        }
+        auto self = weak_self.lock();
+        if (!self) return;
+        if (self->m_turn_refresh_gen.load(std::memory_order_acquire) != gen) return;
+        if (self->m_closing.load(std::memory_order_acquire)) return;
+        LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] TURN credentials near expiry, re-requesting");
+        self->requestTurnConfig();
+        }).detach();
+}
+
 void TanLobbyGameCtx::onConnection(bool connected) {
     LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] onConnection connected=", connected);
     if (connected) {
         m_ws_connected.store(true, std::memory_order_release);
         startKeepalive();
         startTurnConfigTimeout();
+        // Ask for the TURN payload once, right away, instead of waiting for the
+        // next heartbeat. Later re-requests are driven by ExpirationInSeconds.
+        requestTurnConfig();
     }
     else {
         doExit("on_nethernet_ws_closed", EXIT_CODE_WS_CONNECT);
@@ -338,6 +424,21 @@ void TanLobbyGameCtx::setupPeerConnection(const std::string& turn_config_json) {
                 }
             }
         }
+    }
+
+    // The credentials expire; ExpirationInSeconds tells us when to ask again.
+    // With 0 (the degraded "no TURN at all" path) there is nothing to refresh:
+    // a later Type=2 could not be applied to an already created PeerConnection.
+    int expiration_sec = 0;
+    if (turn.isMember("ExpirationInSeconds") &&
+        (turn["ExpirationInSeconds"].isInt() || turn["ExpirationInSeconds"].isUInt())) {
+        expiration_sec = turn["ExpirationInSeconds"].asInt();
+    }
+    if (expiration_sec > 0) {
+        scheduleTurnCredentialRefresh(expiration_sec);
+    }
+    else {
+        LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] no ExpirationInSeconds, TURN credential refresh disabled");
     }
 
     m_connection_id = std::to_string(GetRandomData());
@@ -461,13 +562,42 @@ void TanLobbyGameCtx::setupPeerConnection(const std::string& turn_config_json) {
         auto self = weak_self.lock();
         if (!self) return;
 
-        std::vector<uint8_t> data;
+        std::vector<uint8_t> frame;
         if (auto* bin = std::get_if<rtc::binary>(&msg)) {
-            data.reserve(bin->size());
-            for (auto b : *bin) data.push_back(static_cast<uint8_t>(b));
+            frame.reserve(bin->size());
+            for (auto b : *bin) frame.push_back(static_cast<uint8_t>(b));
         }
         else if (auto* str = std::get_if<std::string>(&msg)) {
-            data.assign(str->begin(), str->end());
+            frame.assign(str->begin(), str->end());
+        }
+
+        // NetherNet framing: [uint8 remaining-segments][chunk]. Both reference
+        // implementations reject a frame shorter than two bytes, so drop it.
+        if (frame.size() < 2) {
+            LOG(LOG_WARN, "[TanLobbyGameCtx] dropping short frame, size=", frame.size());
+            return;
+        }
+
+        std::vector<uint8_t> message;
+        {
+            std::lock_guard<std::mutex> lk(self->m_recv_mutex);
+            const uint8_t remaining = frame[0];
+            if (self->m_recv_expected >= 0 &&
+                remaining != static_cast<uint8_t>(self->m_recv_expected)) {
+                LOG(LOG_WARN, "[TanLobbyGameCtx] out-of-order segment: expected ",
+                    self->m_recv_expected, ", got ", static_cast<int>(remaining),
+                    " - dropping the whole message");
+                self->m_recv_buf.clear();
+                self->m_recv_expected = -1;
+                return;
+            }
+            self->m_recv_buf.insert(self->m_recv_buf.end(), frame.begin() + 1, frame.end());
+            if (remaining > 0) {
+                self->m_recv_expected = static_cast<int>(remaining) - 1;
+                return;
+            }
+            message.swap(self->m_recv_buf);
+            self->m_recv_expected = -1;
         }
 
         OnDataChannelMessage cb;
@@ -475,8 +605,8 @@ void TanLobbyGameCtx::setupPeerConnection(const std::string& turn_config_json) {
             std::lock_guard<std::mutex> lk(self->m_callback_mutex);
             cb = self->m_on_dc_message;
         }
-        if (cb && !data.empty()) {
-            try { cb(data); }
+        if (cb && !message.empty()) {
+            try { cb(message); }
             catch (const std::exception& e) {
                 LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] onMessage user callback threw: ", e.what());
             }
@@ -537,7 +667,7 @@ void TanLobbyGameCtx::startWsConnectTimeout() {
             if (!self) return;
             if (self->m_ws_connected.load(std::memory_order_acquire)) return;
             if (self->m_closing.load(std::memory_order_acquire)) return;
-            if (!self->m_running) return;
+            if (!self->m_running.load(std::memory_order_acquire)) return;
             self.reset();
             std::this_thread::sleep_for(milliseconds(200));
         }
@@ -552,7 +682,10 @@ void TanLobbyGameCtx::startWsConnectTimeout() {
     m_ws_timeout_thread.detach();
 }
 
-// Stage 2: TURN config timeout
+// Stage 2: TURN config wait. This is NOT fatal any more: after the deadline we
+// bring the PeerConnection up with an empty ICE server list and let host
+// candidates try. Same-LAN play (本地联机) usually connects without a relay, and
+// the reference client behaves the same way.
 void TanLobbyGameCtx::startTurnConfigTimeout() {
     std::weak_ptr<TanLobbyGameCtx> weak_self = shared_from_this();
     m_turn_timeout_thread = std::thread([weak_self]() {
@@ -564,17 +697,23 @@ void TanLobbyGameCtx::startTurnConfigTimeout() {
             if (!self) return;
             if (self->m_turn_received.load(std::memory_order_acquire)) return;
             if (self->m_closing.load(std::memory_order_acquire)) return;
-            if (!self->m_running) return;
+            // No m_running check here on purpose: onConnection() can run before
+            // startUp() stores m_running, which used to kill this watcher
+            // immediately and left the connection waiting forever.
             self.reset();
             std::this_thread::sleep_for(milliseconds(200));
         }
 
         auto self = weak_self.lock();
         if (!self) return;
-        if (self->m_turn_received.load(std::memory_order_acquire)) return;
+        if (self->m_closing.load(std::memory_order_acquire)) return;
+        // The exchange also makes a late Type=2 a no-op, so the PeerConnection
+        // is never created twice.
+        if (self->m_turn_received.exchange(true)) return;
 
-        LOG(LOG_ERROR, "[TanLobbyGameCtx] TURN config timeout after ", TURN_CONFIG_TIMEOUT_MS, "ms");
-        self->doExit("on_nethernet_turn_timeout", EXIT_CODE_TURN_TIMEOUT);
+        LOG(LOG_WARN, "[TanLobbyGameCtx] no TURN config after ", TURN_CONFIG_TIMEOUT_MS,
+            "ms, continuing without ICE servers (direct candidates may still work)");
+        self->setupPeerConnection("{}");
         });
     m_turn_timeout_thread.detach();
 }
@@ -595,7 +734,7 @@ void TanLobbyGameCtx::startConnectResponseTimeout() {
                 LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] CONNECTRESPONSE received, timeout watcher exit");
                 return;
             }
-            if (!self->m_running) return;
+            if (!self->m_running.load(std::memory_order_acquire)) return;
             self.reset();
             std::this_thread::sleep_for(milliseconds(100));
         }
@@ -625,7 +764,7 @@ void TanLobbyGameCtx::startWebRtcTimeout() {
                 return;
             }
             if (self->m_closing.load(std::memory_order_acquire)) return;
-            if (!self->m_running) return;
+            if (!self->m_running.load(std::memory_order_acquire)) return;
             self.reset();
             std::this_thread::sleep_for(milliseconds(200));
         }
@@ -706,7 +845,7 @@ void TanLobbyGameCtx::startUp(const std::string& nethernet_id_to,
     LOG(LOG_SCRIPTING, "[TanLobbyGameCtx] connect() returned ", ok);
 
     m_initialized = true;
-    m_running = ok;
+    m_running.store(ok, std::memory_order_release);
 
     if (ok) {
         startWsConnectTimeout();

@@ -100,12 +100,10 @@ void NetherNetConnectInstance::sendThread() {
             SendKey->encrypt(data);
         }
 
-        // �� ���� NetherNet ��Э��ͷ 0x00
-        std::vector<uint8_t> framed;
-        framed.reserve(1 + data.size());
-        framed.push_back(0x00);
-        framed.insert(framed.end(), data.begin(), data.end());
-        m_nethernet_ctx->sendDataChannelMessage(framed);
+        // NetherNet framing - the 1-byte "remaining segments" counter and any
+        // segmentation - is owned by the transport layer (TanLobbyGameCtx), so
+        // hand it the whole message here.
+        m_nethernet_ctx->sendDataChannelMessage(data);
 
         m_buffer.finishSending();
     }
@@ -114,13 +112,8 @@ void NetherNetConnectInstance::sendThread() {
 void NetherNetConnectInstance::onDataChannelMessage(const std::vector<uint8_t>& data) {
     if (data.empty()) return;
 
-    // �� ���� NetherNet ��Э��ͷ(Ӧ���� 0x00),����
-    // �����Լ��:�����һ�ֽڲ��� 0x00,��һ����־
-    if (data[0] != 0x00) {
-        LOG(LOG_NETWORK, "[NetherNet] unexpected header byte: 0x",
-            std::hex, (int)data[0], std::dec, " (expected 0x00)");
-    }
-
-    if (data.size() < 1) return;
-    HandlePakcet(const_cast<uint8_t*>(data.data()) + 1, data.size() - 1);
+    // The NetherNet "remaining segments" counter has already been consumed and
+    // the message reassembled by the transport layer, so what arrives here is
+    // a complete payload.
+    HandlePakcet(const_cast<uint8_t*>(data.data()), data.size());
 }
