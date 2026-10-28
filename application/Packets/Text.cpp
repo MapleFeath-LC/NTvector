@@ -13,12 +13,43 @@ bool isParamsLike(uint8_t textType)
     return textType == 2u || textType == 3u || textType == 4u;
 }
 
-void skipStringArray(BinaryReader& br)
+const char* const kTagsMessageOnly[6] = {
+    "raw", "tip", "systemMessage", "textObjectWhisper", "textObjectAnnouncement", "textObject"
+};
+const char* const kTagsAuthorAndMessage[3] = { "chat", "whisper", "announcement" };
+const char* const kTagsMessageAndParams[3] = { "translate", "popup", "jukeboxPopup" };
+
+void skipTags(BinaryReader& br, const char* const* tags, int count)
 {
+    std::string value;
+    for (int i = 0; i < count; ++i) {
+        br.ReadStringUTF(value);
+    }
+}
+
+void writeTags(BinaryWriter& bw, const char* const* tags, int count)
+{
+    for (int i = 0; i < count; ++i) {
+        bw.WriteStringUTF(tags[i]);
+    }
+}
+
+void readStringArray(BinaryReader& br, std::vector<std::string>& out)
+{
+    out.clear();
     const unsigned int count = br.ReadVarUInt();
-    std::string ignored;
+    std::string value;
     for (unsigned int i = 0; i < count; ++i) {
-        br.ReadStringUTF(ignored);
+        br.ReadStringUTF(value);
+        out.push_back(value);
+    }
+}
+
+void writeStringArray(BinaryWriter& bw, const std::vector<std::string>& values)
+{
+    bw.WriteVarUInt(static_cast<unsigned int>(values.size()));
+    for (const std::string& value : values) {
+        bw.WriteStringUTF(value);
     }
 }
 
@@ -40,66 +71,77 @@ void Text::Deserializ(std::vector<unsigned char> pack)
     XUID.clear();
     PlatformChatID.clear();
     FilteredMessage.clear();
+    NeedsTranslation = false;
+    Variant = 1;
 
-    Type = br.ReadUInt8();
-    br.ReadUInt8();
+    NeedsTranslation = br.ReadUInt8() != 0;
+    Variant = br.ReadUInt8();
 
-    if (isChatLike(Type)) {
-        br.ReadStringUTF(SourceName);
+    if (Variant == 0u) {
+        skipTags(br, kTagsMessageOnly, 6);
+        Type = br.ReadUInt8();
         br.ReadStringUTF(Message);
     }
-    else if (isParamsLike(Type)) {
+    else if (Variant == 2u) {
+        skipTags(br, kTagsMessageAndParams, 3);
+        Type = br.ReadUInt8();
         br.ReadStringUTF(Message);
-        const unsigned int count = br.ReadVarUInt();
-        std::string param;
-        for (unsigned int i = 0; i < count; ++i) {
-            br.ReadStringUTF(param);
-            Parameters.push_back(param);
-        }
+        readStringArray(br, Parameters);
     }
     else {
+        Variant = 1;
+        skipTags(br, kTagsAuthorAndMessage, 3);
+        Type = br.ReadUInt8();
+        br.ReadStringUTF(SourceName);
         br.ReadStringUTF(Message);
+        if (br.m_pointer < pack.size()) {
+            readStringArray(br, Parameters);
+        }
     }
 
     br.ReadStringUTF(XUID);
     br.ReadStringUTF(PlatformChatID);
-    br.ReadStringUTF(FilteredMessage);
-
-    if (br.m_pointer < pack.size()) {
-        if (Type == 1u) {
-            skipStringArray(br);
-        }
-        else if (Type == 3u) {
-            std::string ignored;
-            br.ReadStringUTF(ignored);
-        }
+    if (br.m_pointer < pack.size() && br.ReadUInt8() != 0) {
+        br.ReadStringUTF(FilteredMessage);
     }
 
-    LOG(LOG_SERVER, "[Text] Message type: ", (int)Type);
+    LOG(LOG_SERVER, "[Text] Message type: ", (int)Type, ", variant: ", (int)Variant);
 }
 
 std::vector<unsigned char> Text::Serializ()
 {
-    BinaryWriter bw(SourceName.size() + Message.size() + 32);
+    BinaryWriter bw(SourceName.size() + Message.size() + 64);
     bw.WriteVarUInt32(ID());
-    bw.WriteUInt8(Type);
-    bw.WriteBool(false);
+
+    const std::string body = Message.empty() ? std::string(" ") : Message;
+
+    bw.WriteUInt8(0);
 
     if (isChatLike(Type)) {
+        bw.WriteUInt8(1);
+        writeTags(bw, kTagsAuthorAndMessage, 3);
+        bw.WriteUInt8(Type);
         bw.WriteStringUTF(SourceName);
-        bw.WriteStringUTF(Message);
+        bw.WriteStringUTF(body);
+        writeStringArray(bw, Parameters);
+    }
+    else if (isParamsLike(Type)) {
+        bw.WriteUInt8(2);
+        writeTags(bw, kTagsMessageAndParams, 3);
+        bw.WriteUInt8(Type);
+        bw.WriteStringUTF(body);
+        writeStringArray(bw, Parameters);
     }
     else {
-        bw.WriteStringUTF(Message);
+        bw.WriteUInt8(0);
+        writeTags(bw, kTagsMessageOnly, 6);
+        bw.WriteUInt8(Type);
+        bw.WriteStringUTF(body);
     }
 
-    bw.WriteStringUTF(std::string());
-    bw.WriteStringUTF(std::string());
-    bw.WriteStringUTF(std::string());
-
-    if (Type == 1u) {
-        bw.WriteVarUInt(0);
-    }
+    bw.WriteStringUTF(XUID);
+    bw.WriteStringUTF(PlatformChatID);
+    bw.WriteUInt8(0);
 
     return bw.vect();
 }

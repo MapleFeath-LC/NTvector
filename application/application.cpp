@@ -58,7 +58,8 @@ NtUniSDK::INtUniSdkGamerInterface* ctx;
 
 
 #define VANILLA_MCP "vanilla.mcp"
-unsigned int MinecraftBedrockProtocolVersion = 860;
+unsigned int MinecraftBedrockProtocolVersion = 898;
+std::string MinecraftBedrockGameVersion = "1.21.130";
 ClientInstance* g_client_instance;
 //ConnectInstance* RakNet_connect;
 //assert(false, "error error error error");

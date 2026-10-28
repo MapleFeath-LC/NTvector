@@ -2,6 +2,28 @@
 #include "ProtocolRead.h"
 #include <cstring>  // for memcpy
 
+namespace {
+
+const char* const kOutputTypeNames[] = { "none", "lastoutput", "silent", "alloutput", "dataset" };
+constexpr size_t kOutputTypeCount = sizeof(kOutputTypeNames) / sizeof(kOutputTypeNames[0]);
+
+const char* outputTypeName(uint8_t type)
+{
+    return type < kOutputTypeCount ? kOutputTypeNames[type] : kOutputTypeNames[CommandOutputTypeNone];
+}
+
+uint8_t outputTypeFromName(const std::string& name)
+{
+    for (size_t i = 0; i < kOutputTypeCount; ++i) {
+        if (name == kOutputTypeNames[i]) {
+            return static_cast<uint8_t>(i);
+        }
+    }
+    return CommandOutputTypeNone;
+}
+
+} // namespace
+
 uint32_t CommandOutput::ID()
 {
     return IDCommandOutput;
@@ -29,28 +51,26 @@ void CommandOutput::Deserializ(std::vector<unsigned char> pack)
         Origin.PlayerUniqueID = pkt_io::ReadZigZag64(br);
     }
 
-    // 2. 读取 OutputType (uint8)
-    OutputType = br.ReadUInt8();
+    // 2. 读取 OutputType
+    std::string typeName;
+    br.ReadStringUTF(typeName);
+    OutputType = outputTypeFromName(typeName);
 
-    // 3. 读取 SuccessCount (varuint32)
-    SuccessCount = br.ReadVarUInt();
+    // 3. 读取 SuccessCount
+    SuccessCount = br.ReadUInt32();
 
     // 4. 读取 OutputMessages 数组
-    uint32_t messageCount = br.ReadVarUInt();
+    const uint32_t messageCount = br.ReadVarUInt();
     OutputMessages.clear();
     OutputMessages.reserve(messageCount);
 
     for (uint32_t i = 0; i < messageCount; i++) {
         CommandOutputMessage msg;
 
-        // Internal (bool)
+        br.ReadStringUTF(msg.MessageID);
         br.ReadBool(msg.Internal);
 
-        // MessageID (string)
-        br.ReadStringUTF(msg.MessageID);
-
-        // Parameters (string array)
-        uint32_t paramCount = br.ReadVarUInt();
+        const uint32_t paramCount = br.ReadVarUInt();
         msg.Parameters.reserve(paramCount);
         for (uint32_t j = 0; j < paramCount; j++) {
             std::string param;
@@ -61,8 +81,8 @@ void CommandOutput::Deserializ(std::vector<unsigned char> pack)
         OutputMessages.push_back(std::move(msg));
     }
 
-    // 5. 读取 DataSet (仅当 OutputType == CommandOutputTypeDataSet 时)
-    if (OutputType == CommandOutputTypeDataSet) {
+    // 5. 读取 DataSet (包尾可选)
+    if (br.m_pointer < pack.size() && br.ReadUInt8() != 0) {
         br.ReadStringUTF(DataSet);
     }
 }
@@ -72,6 +92,8 @@ std::vector<unsigned char> CommandOutput::Serializ()
     // CommandOutput 通常是服务端发送的，客户端一般不需要序列化
     // 但为了完整性，这里提供序列化实现
     BinaryWriter bw(256);
+
+    bw.WriteVarUInt32(ID());
 
     // 1. 写入 CommandOrigin
     bw.WriteVarUInt(Origin.Origin);
@@ -88,16 +110,17 @@ std::vector<unsigned char> CommandOutput::Serializ()
     }
 
     // 2. 写入 OutputType
-    bw.WriteUInt8(OutputType);
+    bw.WriteStringUTF(std::string(outputTypeName(OutputType)));
 
     // 3. 写入 SuccessCount
-    bw.WriteVarUInt(SuccessCount);
+    bw.WriteUInt32(SuccessCount);
 
     // 4. 写入 OutputMessages
     bw.WriteVarUInt(static_cast<uint32_t>(OutputMessages.size()));
     for (const auto& msg : OutputMessages) {
-        bw.WriteBool(msg.Internal);
         bw.WriteStringUTF(msg.MessageID);
+        bw.WriteBool(msg.Internal);
+
         bw.WriteVarUInt(static_cast<uint32_t>(msg.Parameters.size()));
         for (const auto& param : msg.Parameters) {
             bw.WriteStringUTF(param);
@@ -105,7 +128,9 @@ std::vector<unsigned char> CommandOutput::Serializ()
     }
 
     // 5. 写入 DataSet
-    if (OutputType == CommandOutputTypeDataSet) {
+    const bool hasData = !DataSet.empty();
+    bw.WriteBool(hasData);
+    if (hasData) {
         bw.WriteStringUTF(DataSet);
     }
 

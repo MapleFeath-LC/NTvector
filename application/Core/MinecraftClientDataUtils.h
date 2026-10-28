@@ -8,6 +8,7 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "Logger.h"
+extern std::string MinecraftBedrockGameVersion;
 class MinecraftClientDataUtils
 {
 public:
@@ -91,7 +92,7 @@ public:
             root["PlatformOnlineId"] = "";
             root["CapeId"] = "-1";
             root["SkinAnimationData"] = "";
-            root["GameVersion"] = "1.21.120";
+            root["GameVersion"] = MinecraftBedrockGameVersion;
             root["LanguageCode"] = "zh_CN";
             root["SkinIID"] = "-1";
             root["SkinColor"] = "#0";

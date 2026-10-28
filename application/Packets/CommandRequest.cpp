@@ -1,10 +1,8 @@
 #include "CommandRequest.h"
 
-extern unsigned int MinecraftBedrockProtocolVersion;
-
 namespace {
-constexpr unsigned int ProtocolV11960 = 567;
 constexpr size_t CommandUuidSize = 16;
+constexpr const char* CommandVersionLatest = "latest";
 
 bool needsPlayerId(CommandOriginType originType)
 {
@@ -42,12 +40,8 @@ std::vector<unsigned char> CommandRequest::Serializ()
     }
 
     bw.WriteBool(m_internalSource);
-
-    if (MinecraftBedrockProtocolVersion >= ProtocolV11960) {
-        bw.WriteVarInt(m_commandVersion);
-    }
-
     bw.WriteBool(m_unlimit);
+    bw.WriteStringUTF(std::string(CommandVersionLatest));
 
     return bw.vect();
 }

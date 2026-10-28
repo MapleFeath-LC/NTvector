@@ -8,6 +8,8 @@ public:
 	void Deserializ(std::vector<unsigned char> pack) override;
 	std::vector<unsigned char> Serializ() override;
 	uint8_t Type = 0;
+	bool NeedsTranslation = false;
+	uint8_t Variant = 1;
 	std::string SourceName;
 	std::string Message;
 	std::vector<std::string> Parameters;
