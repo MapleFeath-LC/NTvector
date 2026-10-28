@@ -1,6 +1,6 @@
 #include "RequestChunkRadius.h"
 
-unsigned char RequestChunkRadius::ID()
+uint32_t RequestChunkRadius::ID()
 {
     return IDRequestChunkRadius;
 }
@@ -8,8 +8,8 @@ unsigned char RequestChunkRadius::ID()
 std::vector<unsigned char> RequestChunkRadius::Serializ()
 {
 	BinaryWriter Write(3);
-	Write.WriteUInt8(ID());
-	Write.WriteVarUInt(ChunkRadius);
+	Write.WriteVarUInt32(ID());
+	Write.WriteVarInt(ChunkRadius);
 	Write.WriteUInt8(MaxChunkRadius);
 	return Write.vect();
 }

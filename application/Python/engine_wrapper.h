@@ -272,12 +272,12 @@ private:
         }
 
         // Success
-        PyObject* py_success = PyBool_FromLong(msg.Success ? 1 : 0);
+        PyObject* py_success = PyBool_FromLong(msg.Internal ? 1 : 0);
         PyDict_SetItemString(dict, "success", py_success);
         Py_DECREF(py_success);
 
         // Message
-        PyObject* py_message = PyTextFromUtf8(msg.Message.c_str());
+        PyObject* py_message = PyTextFromUtf8(msg.MessageID.c_str());
         PyDict_SetItemString(dict, "message", py_message);
         Py_DECREF(py_message);
 
@@ -615,11 +615,6 @@ private:
         PyObject* py_sub_client = PyBool_FromLong(entry.SubClient ? 1 : 0);
         PyDict_SetItemString(dict, "sub_client", py_sub_client);
         Py_DECREF(py_sub_client);
-
-        // Unknown (网易特有)
-        PyObject* py_unknown = PyLong_FromLong(entry.Unknown);
-        PyDict_SetItemString(dict, "unknown", py_unknown);
-        Py_DECREF(py_unknown);
 
         PyObject* py_player_color = PyLong_FromLong(entry.PlayerColor);
         PyDict_SetItemString(dict, "player_color", py_player_color);

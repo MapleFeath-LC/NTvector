@@ -1,6 +1,6 @@
 #include "ResourcePackClientResponse.h"
 
-unsigned char ResourcePackClientResponse::ID()
+uint32_t ResourcePackClientResponse::ID()
 {
     return IDResourcePackClientResponse;
 }
@@ -8,7 +8,7 @@ unsigned char ResourcePackClientResponse::ID()
 std::vector<unsigned char> ResourcePackClientResponse::Serializ()
 {
 	BinaryWriter Write(4);
-	Write.WriteUInt8(ID());
+	Write.WriteVarUInt32(ID());
 	Write.WriteUInt8(Response);
 	Write.WriteUInt16(PacksToDownload.size());
 	for (int i = 0;i < PacksToDownload.size();i++) {

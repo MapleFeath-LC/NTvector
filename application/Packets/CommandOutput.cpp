@@ -1,7 +1,8 @@
 #include "CommandOutput.h"
+#include "ProtocolRead.h"
 #include <cstring>  // for memcpy
 
-unsigned char CommandOutput::ID()
+uint32_t CommandOutput::ID()
 {
     return IDCommandOutput;
 }
@@ -25,7 +26,7 @@ void CommandOutput::Deserializ(std::vector<unsigned char> pack)
 
     // PlayerUniqueID (varint64) - 仅当 Origin == DevConsole 或 Test 时读取
     if (Origin.Origin == CommandOriginDevConsole || Origin.Origin == CommandOriginTest) {
-        Origin.PlayerUniqueID = br.ReadVarInt64();
+        Origin.PlayerUniqueID = pkt_io::ReadZigZag64(br);
     }
 
     // 2. 读取 OutputType (uint8)
@@ -42,11 +43,11 @@ void CommandOutput::Deserializ(std::vector<unsigned char> pack)
     for (uint32_t i = 0; i < messageCount; i++) {
         CommandOutputMessage msg;
 
-        // Success (bool)
-        br.ReadBool(msg.Success);
+        // Internal (bool)
+        br.ReadBool(msg.Internal);
 
-        // Message (string)
-        br.ReadStringUTF(msg.Message);
+        // MessageID (string)
+        br.ReadStringUTF(msg.MessageID);
 
         // Parameters (string array)
         uint32_t paramCount = br.ReadVarUInt();
@@ -95,8 +96,8 @@ std::vector<unsigned char> CommandOutput::Serializ()
     // 4. 写入 OutputMessages
     bw.WriteVarUInt(static_cast<uint32_t>(OutputMessages.size()));
     for (const auto& msg : OutputMessages) {
-        bw.WriteBool(msg.Success);
-        bw.WriteStringUTF(msg.Message);
+        bw.WriteBool(msg.Internal);
+        bw.WriteStringUTF(msg.MessageID);
         bw.WriteVarUInt(static_cast<uint32_t>(msg.Parameters.size()));
         for (const auto& param : msg.Parameters) {
             bw.WriteStringUTF(param);
@@ -116,7 +117,7 @@ std::vector<std::string> CommandOutput::GetAllMessages() const
     std::vector<std::string> result;
     result.reserve(OutputMessages.size());
     for (const auto& msg : OutputMessages) {
-        result.push_back(msg.Message);
+        result.push_back(msg.MessageID);
     }
     return result;
 }

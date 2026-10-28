@@ -1,7 +1,7 @@
 #include "NetworkSettings.h"
 #include "Logger.h"
 
-unsigned char NetworkSettings::ID()
+uint32_t NetworkSettings::ID()
 {
     return IDNetworkSettings;
 }
@@ -12,12 +12,13 @@ void NetworkSettings::Deserializ(std::vector<unsigned char> pack)
     BinaryReader br(pack.data(),pack.size());
     CompressionThreshold = br.ReadUInt16();
     CompressionAlgorithm = br.ReadUInt16();
-    ClientThrottle = br.ReadInt8();
+    ClientThrottleEnabled = br.ReadInt8();
     ClientThrottleThreshold = br.ReadInt8();
-    ClientThrottleScalar = (float)br.ReadUInt32();
+    uint32_t scalarBits = br.ReadUInt32();
+    std::memcpy(&ClientThrottleScalar, &scalarBits, sizeof(float));
     LOG(LOG_NETWORK, "[NetworkSettings] CompressionThreshold: ", CompressionThreshold);
     LOG(LOG_NETWORK, "[NetworkSettings] CompressionAlgorithm: ", CompressionAlgorithm);
-    LOG(LOG_NETWORK, "[NetworkSettings] ClientThrottle: ", (int)ClientThrottle);
+    LOG(LOG_NETWORK, "[NetworkSettings] ClientThrottleEnabled: ", (int)ClientThrottleEnabled);
     LOG(LOG_NETWORK, "[NetworkSettings] ClientThrottleThreshold: ", (int)ClientThrottleThreshold);
     LOG(LOG_NETWORK, "[NetworkSettings] ClientThrottleScalar: ", ClientThrottleScalar);
 }

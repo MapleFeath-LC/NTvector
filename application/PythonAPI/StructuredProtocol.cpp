@@ -137,11 +137,14 @@ PyObject* decodeKnownPacket(uint32_t packetId, const std::string& payload, std::
     if (packetId == IDText) {
         Text packet;
         packet.Deserializ(bytes);
+        const bool chatLike = packet.Type == 1 || packet.Type == 7 || packet.Type == 8;
+        const std::string firstString = chatLike ? packet.SourceName : packet.Message;
+        const std::string secondString = chatLike ? packet.Message : std::string();
         PyObject* result = PyDict_New();
-        setItem(result, "type", PyLong_FromUnsignedLong(packet.type));
-        setItem(result, "data", PyUnicode_FromStringAndSize(packet._data.data(), packet._data.size()));
-        setItem(result, "data2", PyUnicode_FromStringAndSize(packet._data2.data(), packet._data2.size()));
-        setItem(result, "system_message", PyUnicode_FromStringAndSize(packet.SysMsg.data(), packet.SysMsg.size()));
+        setItem(result, "type", PyLong_FromUnsignedLong(packet.Type));
+        setItem(result, "data", PyUnicode_FromStringAndSize(firstString.data(), firstString.size()));
+        setItem(result, "data2", PyUnicode_FromStringAndSize(secondString.data(), secondString.size()));
+        setItem(result, "system_message", PyUnicode_FromStringAndSize(packet.FilteredMessage.data(), packet.FilteredMessage.size()));
         return result;
     }
 
@@ -156,9 +159,9 @@ PyObject* decodeKnownPacket(uint32_t packetId, const std::string& payload, std::
         PyObject* messages = PyList_New(packet.OutputMessages.size());
         for (size_t i = 0; i < packet.OutputMessages.size(); ++i) {
             PyObject* message = PyDict_New();
-            setItem(message, "success", PyBool_FromLong(packet.OutputMessages[i].Success));
+            setItem(message, "success", PyBool_FromLong(packet.OutputMessages[i].Internal));
             setItem(message, "message", PyUnicode_FromStringAndSize(
-                packet.OutputMessages[i].Message.data(), packet.OutputMessages[i].Message.size()));
+                packet.OutputMessages[i].MessageID.data(), packet.OutputMessages[i].MessageID.size()));
             PyList_SetItem(messages, i, message);
         }
         setItem(result, "messages", messages);

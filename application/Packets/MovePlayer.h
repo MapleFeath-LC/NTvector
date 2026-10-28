@@ -3,15 +3,15 @@
 class MovePlayer : public PacketBase
 {
 public:
-    virtual unsigned char ID() override
+    virtual uint32_t ID() override
     {
         return IDMovePlayer;
     }
     virtual std::vector<unsigned char> Serializ() override
     {
         BinaryWriter bw(256);
-        bw.WriteUInt8(ID());
-        bw.WriteVarInt64(EntityRuntimeID);          // varint64，与 StartGame 一致
+        bw.WriteVarUInt32(ID());
+        bw.WriteVarUInt64(static_cast<unsigned __int64>(EntityRuntimeID));          // varint64，与 StartGame 一致
         bw.WriteFloat(Position.x);
         bw.WriteFloat(Position.y);
         bw.WriteFloat(Position.z);
@@ -20,12 +20,12 @@ public:
         bw.WriteFloat(HeadYaw);
         bw.WriteUInt8(Mode);                        // 0 normal, 1 reset, 2 teleport, 3 rotation
         bw.WriteBool(OnGround);
-        bw.WriteVarInt((int)RiddenRuntimeID);
+        bw.WriteVarUInt64(static_cast<unsigned __int64>(RiddenRuntimeID));
         if (Mode == 2) {                            // teleport 附加字段 (1.21.120)
             bw.WriteInt32(Cause);                   // teleport cause (li32)
             bw.WriteInt32(SourceEntityType);        // LegacyEntityType (li32)
         }
-        bw.WriteVarInt64(Tick);
+        bw.WriteVarUInt64(static_cast<unsigned __int64>(Tick));
         return bw.vect();
     }
     virtual void Deserializ(std::vector<unsigned char> pack) override

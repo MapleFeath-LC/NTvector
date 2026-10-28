@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "PacketBase.h"
 #include <iostream>
 enum PlayerAuthInputData
@@ -53,7 +53,7 @@ class PlayerAuthInput :
     public PacketBase
 {
 public:
-    unsigned char ID() override {
+    uint32_t ID() override {
         return IDPlayerAuthInput;
     }
     //void Deserializ(std::vector<unsigned char> pack) override;

@@ -4,14 +4,14 @@ class PlayerAction :
     public PacketBase
 {
 public:
-    virtual unsigned char ID() override
+    virtual uint32_t ID() override
     {
         return IDPlayerAction;
     }
     virtual std::vector<unsigned char> Serializ() override
     {
         BinaryWriter bw(256);
-        bw.WriteUInt8(ID());
+        bw.WriteVarUInt32(ID());
         bw.WriteVarUInt64(EntityRuntimeID);
         bw.WriteVarUInt(ActionType);
         bw.WriteVarUInt(BlockPosition.x);

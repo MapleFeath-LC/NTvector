@@ -56,6 +56,8 @@ void ConnectInstance::SendPacket()
 
             if (is_networksetting)
                 data = std::move(m_algorithm->Compress(data));
+            else if (is_nocompress)
+                data.insert(data.begin(), 0xFF);
             if (is_servertoclient) {
                 unsigned char hash[32];
                 unsigned char ulong[8];
@@ -235,6 +237,8 @@ void ConnectInstance::HandlePakcet(unsigned char* data, size_t length) {
     }
     if (is_networksetting)
         packetdata = m_algorithm->Decompress(packetdata);
+    else if (is_nocompress && !packetdata.empty() && packetdata[0] == 0xFF)
+        packetdata.erase(packetdata.begin());
     if (!packetdata.empty()) {
         BinaryReader br(packetdata.data(), packetdata.size());
         while (true) {

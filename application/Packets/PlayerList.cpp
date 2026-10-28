@@ -199,7 +199,6 @@ void readEntry(BinaryReader& br, PlayerListEntry& entry)
     br.ReadBool(entry.Host);
     br.ReadBool(entry.SubClient);
     entry.PlayerColor = br.ReadInt32();
-    entry.Unknown = entry.PlayerColor;
 }
 
 void writeEntry(BinaryWriter& bw, const PlayerListEntry& entry)
@@ -214,13 +213,12 @@ void writeEntry(BinaryWriter& bw, const PlayerListEntry& entry)
     bw.WriteBool(entry.Teacher);
     bw.WriteBool(entry.Host);
     bw.WriteBool(entry.SubClient);
-    const int32_t playerColor = entry.PlayerColor != 0 ? entry.PlayerColor : entry.Unknown;
-    bw.WriteInt32(playerColor);
+    bw.WriteInt32(entry.PlayerColor);
 }
 
 } // namespace
 
-unsigned char PlayerListPacket::ID()
+uint32_t PlayerListPacket::ID()
 {
     return IDPlayerList;
 }

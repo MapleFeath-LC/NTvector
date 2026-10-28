@@ -1,4 +1,5 @@
-﻿#include "CommandBlockUpdate.h"
+#include "CommandBlockUpdate.h"
+#include "ProtocolRead.h"
 
 // 辅助函数：读取 varuint64 (无符号变长 64 位整数)
 static uint64_t ReadVarUInt64(BinaryReader& br) {
@@ -15,9 +16,9 @@ static uint64_t ReadVarUInt64(BinaryReader& br) {
 static BlockPos ReadUBlockPos(BinaryReader& br) {
     BlockPos pos;
     // UBlockPos 使用有符号 varint 编码
-    pos.x = br.ReadVarInt();
+    pos.x = pkt_io::ReadZigZag32(br);
     pos.y = static_cast<int32_t>(br.ReadVarUInt());  // y 通常是无符号的
-    pos.z = br.ReadVarInt();
+    pos.z = pkt_io::ReadZigZag32(br);
     return pos;
 }
 
@@ -28,7 +29,7 @@ static void WriteUBlockPos(BinaryWriter& bw, const BlockPos& pos) {
     bw.WriteVarInt(pos.z);
 }
 
-unsigned char CommandBlockUpdate::ID()
+uint32_t CommandBlockUpdate::ID()
 {
     return IDCommandBlockUpdate;
 }
@@ -85,8 +86,8 @@ std::vector<unsigned char> CommandBlockUpdate::Serializ()
 {
     BinaryWriter bw(256);
 
-    // 写入数据包ID - 必须用 VarUInt 编码，不是 UInt8
-    bw.WriteVarUInt(ID());
+    // 写入数据包ID - 必须用 varint 编码，不是 UInt8
+    bw.WriteVarUInt32(ID());
     // 1. 写入 Block 标志
     bw.WriteBool(Block);
 

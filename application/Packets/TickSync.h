@@ -3,21 +3,21 @@
 class TickSync : public PacketBase
 {
 public:
-    virtual unsigned char ID() override {
+    virtual uint32_t ID() override {
         return IDTickSync;
     }
     virtual std::vector<unsigned char> Serializ() override {
         BinaryWriter bw(25);
-        bw.WriteUInt8(ID());
-        bw.WriteVarInt64(ClientRequestTick);
-        bw.WriteVarInt64(ServerReceptionTick);
+        bw.WriteVarUInt32(ID());
+        bw.WriteInt64(ClientRequestTick);
+        bw.WriteInt64(ServerReceptionTick);
         return bw.vect();
     }
     virtual void Deserializ(std::vector<unsigned char> pack) override {
         BinaryReader br(pack.data(), static_cast<int>(pack.size()));
-        ClientRequestTick = br.ReadVarInt64();
-        ServerReceptionTick = br.ReadVarInt64();
+        ClientRequestTick = br.ReadInt64();
+        ServerReceptionTick = br.ReadInt64();
     }
-    __int64 ClientRequestTick;
-    __int64 ServerReceptionTick;
+    __int64 ClientRequestTick = 0;
+    __int64 ServerReceptionTick = 0;
 };

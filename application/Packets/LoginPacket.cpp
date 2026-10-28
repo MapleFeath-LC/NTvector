@@ -1,7 +1,7 @@
 #include "LoginPacket.h"
 #include "Logger.h"
 
-unsigned char LoginPacket::ID()
+uint32_t LoginPacket::ID()
 {
     return IDLogin;
 }
@@ -19,7 +19,7 @@ std::vector<unsigned char> LoginPacket::Serializ()
 	bw.Write((const char*)skindata.data(), skindata.size());
 	int bwsize = bw.size();
 	BinaryWriter Write(calculateVarintSizeFast(bwsize) + bwsize + 5);
-	Write.WriteUInt8(ID());
+	Write.WriteVarUInt32(ID());
 	Write.WriteUInt32_Big(ProtocolVersion);
 	Write.WriteVarUInt(bwsize);
 	Write.Write(bw.data(),bwsize);

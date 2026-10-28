@@ -3,7 +3,7 @@
 #include <sstream>
 #include <iomanip>
 
-unsigned char Disconnect::ID()
+uint32_t Disconnect::ID()
 {
     return IDDisconnect;
 }
@@ -21,15 +21,13 @@ void Disconnect::Deserializ(std::vector<unsigned char> pack)
         LOG(LOG_WARN, hex_oss.str());
     }
     BinaryReader br(pack.data(), pack.size());
-    br.ReadInt16();
-    // 新协议在 Int16 后增加了一个字节的 hideDisconnectScreen bool
+    const int rawReason = br.ReadVarInt();
+    const int reason = (rawReason >> 1) ^ -(rawReason & 1);
     uint8_t hide = br.ReadUInt8();
-    size_t length = 0;
     if (!hide) {
-        length = br.ReadVarUInt();
+        br.ReadStringUTF(message);
     }
-    message = string((char*)br.Read(length),length);
     LOG(LOG_WARN, "[Disconnect] Disconnect message: ", message);
-    LOG(LOG_WARN, "[Disconnect] Message length: ", length);
+    LOG(LOG_WARN, "[Disconnect] reason: ", reason);
     LOG(LOG_WARN, "[Disconnect] hideDisconnectScreen: ", (int)hide);
 }

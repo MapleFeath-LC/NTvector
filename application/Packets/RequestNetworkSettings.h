@@ -3,7 +3,7 @@
 class RequestNetworkSettings : public PacketBase
 {
 public:
-	unsigned char ID() override;
+	uint32_t ID() override;
 	std::vector<unsigned char> Serializ() override;
 	uint32_t ProtocolVersion;
 };

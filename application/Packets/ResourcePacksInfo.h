@@ -4,7 +4,7 @@ class ResourcePacksInfo :
     public PacketBase
 {
 public:
-	unsigned char ID() override;
+	uint32_t ID() override;
 	void Deserializ(std::vector<unsigned char> pack) override;
 	bool TexturePackRequired;
 	bool HasScripts;

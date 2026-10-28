@@ -781,7 +781,7 @@ static PyObject* rpc(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "y#", &data, &length))
         return NULL;
     PyRpc rpc{};
-    rpc.rpcdata = std::string(data, length);
+    rpc.Data = std::string(data, length);
     g_client_instance->getInstance()->WritePacket(rpc);
     Py_RETURN_NONE;
 }
@@ -807,9 +807,9 @@ static PyObject* message(PyObject* self, PyObject* args) {
         return NULL;
     VectorUI::NotifyChat();   // outgoing chat also drives the Portal state
     Text text{};
-    text.type = 1;
-    text._data = std::string(name);
-    text._data2 = std::string(msg);
+    text.Type = 1;
+    text.SourceName = std::string(name);
+    text.Message = std::string(msg);
     g_client_instance->getInstance()->WritePacket(text);
     Py_RETURN_NONE;
 }

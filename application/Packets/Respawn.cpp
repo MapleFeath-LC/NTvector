@@ -1,4 +1,4 @@
-﻿#include "Respawn.h"
+#include "Respawn.h"
 
 // 辅助函数：读取 varuint64 (无符号变长 64 位整数)
 static uint64_t ReadVarUInt64(BinaryReader& br) {
@@ -11,7 +11,7 @@ static uint64_t ReadVarUInt64(BinaryReader& br) {
     return value;
 }
 
-unsigned char Respawn::ID()
+uint32_t Respawn::ID()
 {
     return IDRespawn;
 }

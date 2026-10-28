@@ -1,6 +1,6 @@
 #include "PlayStatus.h"
 
-unsigned char PlayStatus::ID()
+uint32_t PlayStatus::ID()
 {
     return IDPlayStatus;
 }

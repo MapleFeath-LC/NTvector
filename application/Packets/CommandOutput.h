@@ -37,15 +37,15 @@ struct CommandOrigin {
 
 // 命令输出消息结构
 struct CommandOutputMessage {
-    bool Success = false;                  // 是否成功
-    std::string Message;                   // 消息内容
+    bool Internal = false;                 // 是否内部消息
+    std::string MessageID;                 // 翻译键(不是消息文本)
     std::vector<std::string> Parameters;   // 参数列表
 };
 
 class CommandOutput : public PacketBase
 {
 public:
-    unsigned char ID() override;
+    uint32_t ID() override;
     void Deserializ(std::vector<unsigned char> pack) override;
     std::vector<unsigned char> Serializ() override;
 

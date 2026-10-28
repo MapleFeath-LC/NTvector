@@ -21,7 +21,7 @@ struct ContainerOpenInfo {
 class ContainerOpen : public PacketBase
 {
 public:
-    unsigned char ID() override
+    uint32_t ID() override
     {
         return IDContainerOpen;
     }

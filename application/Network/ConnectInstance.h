@@ -51,6 +51,7 @@ public:
         m_algorithm = std::move(algo);
     }
     void setNetworkSettingEnabled(bool enabled) { is_networksetting = enabled; }
+    void setNoCompression(bool enabled) { is_nocompress = enabled; }
 	std::string chain;
 	std::string skindata;
 	std::string ip;
@@ -67,6 +68,7 @@ public:
     }
 protected:
     bool is_networksetting = false;
+    bool is_nocompress = false;
     bool is_servertoclient = false;
     bool m_is_disconnect;
     PacketBuffer m_buffer;

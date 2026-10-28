@@ -93,15 +93,12 @@ struct PlayerListEntry {
     bool Host = false;
     bool SubClient = false;
     int32_t PlayerColor = 0;
-
-    // Deprecated compatibility name. It mirrors PlayerColor on decode.
-    int32_t Unknown = 0;
 };
 
 class PlayerListPacket : public PacketBase
 {
 public:
-    unsigned char ID() override;
+    uint32_t ID() override;
     void Deserializ(std::vector<unsigned char> pack) override;
     std::vector<unsigned char> Serializ() override;
 

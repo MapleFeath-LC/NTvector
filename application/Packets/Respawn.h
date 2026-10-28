@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "PacketBase.h"
 
 // Respawn 状态常量
@@ -12,7 +12,7 @@ constexpr uint8_t RespawnStateClientReadyToSpawn = 2;  // 客户端准备好重�
 class Respawn : public PacketBase
 {
 public:
-    unsigned char ID() override;
+    uint32_t ID() override;
     void Deserializ(std::vector<unsigned char> pack) override;
     std::vector<unsigned char> Serializ() override;
 

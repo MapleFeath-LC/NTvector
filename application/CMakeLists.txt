@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
 
-# Prefer a locally installed Python development package instead of a user-specific path.
-find_package(Python3 3.12 COMPONENTS Development REQUIRED)
+set(PY312_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/python312")
+
+add_library(Python3::Python SHARED IMPORTED)
+set_target_properties(Python3::Python PROPERTIES
+    IMPORTED_IMPLIB "${PY312_ROOT}/python312.lib"
+    IMPORTED_LOCATION "${PY312_ROOT}/python312.dll"
+    INTERFACE_INCLUDE_DIRECTORIES "${PY312_ROOT}/include")
+
+set(Python3_INCLUDE_DIRS "${PY312_ROOT}/include")
 
 # 收集所有源文件
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS

@@ -1,6 +1,6 @@
 #include "ServerToClientHandshake.h"
 
-unsigned char ServerToClientHandshake::ID()
+uint32_t ServerToClientHandshake::ID()
 {
     return IDServerToClientHandshake;
 }

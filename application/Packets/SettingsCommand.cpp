@@ -1,6 +1,6 @@
 #include "SettingsCommand.h"
 
-unsigned char SettingsCommand::ID()
+uint32_t SettingsCommand::ID()
 {
     return IDSettingsCommand;
 }
@@ -9,8 +9,7 @@ std::vector<unsigned char> SettingsCommand::Serializ()
 {
     int chainsize = command.size();
     BinaryWriter bw(chainsize + 4);
-    bw.WriteUInt8(ID());
-    bw.WriteUInt8(1);
+    bw.WriteVarUInt32(ID());
     bw.WriteVarUInt(chainsize);
     bw.Write(command.data(), chainsize);
     bw.WriteUInt8(SuppressOutput);

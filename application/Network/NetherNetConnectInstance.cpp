@@ -86,6 +86,8 @@ void NetherNetConnectInstance::sendThread() {
 
         if (is_networksetting)
             data = m_algorithm->Compress(data);
+        else if (is_nocompress)
+            data.insert(data.begin(), 0xFF);
 
         if (is_servertoclient) {
             unsigned char hash[32];

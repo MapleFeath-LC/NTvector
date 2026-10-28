@@ -1,6 +1,7 @@
 #pragma once
 // 数据包 ID 宏定义
 // https://prismarinejs.github.io/minecraft-data/protocol/bedrock/1.21.42/#Action
+// https://github.com/CloudburstMC/Protocol
 #include <vector>
 #include <string>
 #include "BinaryWriter.h"
@@ -22,8 +23,9 @@
 #define IDStartGame 11             // 开始游戏
 #define IDAddPlayer 12             // 添加玩家实体
 #define IDAddActor 13              // 添加实体
-#define IDRemoveActor 14           // 添加实体
+#define IDRemoveActor 14           // 移除实体
 #define IDAddItemActor 15          // 添加物品实体
+#define IDServerPlayerPostMovePosition 16 // 服务端玩家移动后位置（服务端 -> 客户端）
 #define IDTakeItemActor 17         // 捡起物品实体（动画）
 #define IDMoveActorAbsolute 18     // 移动实体到绝对位置
 #define IDMovePlayer 19            // 玩家移动（服务端 <-> 客户端）
@@ -44,6 +46,7 @@
 #define IDBlockPickRequest 34      // 拾取物品请求（客户端 -> 服务端）
 #define IDActorPickRequest 35      // 拾取实体请求（客户端 -> 服务端）
 #define IDPlayerAction 36          // 玩家行为（客户端 -> 服务端）
+#define IDEntityFall 37            // 实体下落（客户端 -> 服务端）
 #define IDHurtArmour 38            // 盔甲损害（服务端 -> 客户端）
 #define IDSetActorData 39          // 实体元数据（服务端 -> 客户端）[实体是否着火././...]
 #define IDSetActorMotion 40        // 设置客户端速度（服务端 -> 客户端）
@@ -122,6 +125,7 @@
 #define IDSetLocalPlayerAsInitialised 113 // 设置本地玩家为已初始化（服务端 -> 客户端）
 #define IDUpdateSoftEnum 114       // 更新软枚举（服务端 -> 客户端）
 #define IDNetworkStackLatency 115  // 网络堆栈延迟（服务端 -> 客户端）
+#define IDBlockPalette 116         // 方块调色板（旧版，已废弃）
 #define IDScriptCustomEvent 117    // 脚本自定义事件（客户端 -> 服务端）
 #define IDSpawnParticleEffect 118  // 生成粒子效果（服务端 -> 客户端）
 #define IDAvailableActorIdentifiers 119 // 可用实体标识符（服务端 -> 客户端）
@@ -131,13 +135,15 @@
 #define IDLevelSoundEvent 123      // 世界声音事件（服务端 -> 客户端）
 #define IDLevelEventGeneric 124    // 世界事件通用（服务端 -> 客户端）
 #define IDLecternUpdate 125        // 讲台更新（客户端 -> 服务端）
-#define IDAddEntity 127            // 添加实体（服务端 -> 客户端）
-#define IDRemoveEntity 128         // 移除实体（服务端 -> 客户端）
+#define IDVideoStreamConnect 126   // 视频流连接（服务端 -> 客户端）
+#define IDAddEntity 127            // 旧版添加实体（已废弃，新版为 13 IDAddActor）
+#define IDRemoveEntity 128         // 旧版移除实体（已废弃，新版为 14 IDRemoveActor）
 #define IDClientCacheStatus 129    // 客户端缓存状态（客户端 -> 服务端）
 #define IDOnScreenTextureAnimation 130 // 屏幕纹理动画（服务端 -> 客户端）
 #define IDMapCreateLockedCopy 131  // 地图创建锁定副本（服务端 -> 客户端）
 #define IDStructureTemplateDataRequest 132 // 结构模板数据请求（客户端 -> 服务端）
 #define IDStructureTemplateDataResponse 133 // 结构模板数据响应（服务端 -> 客户端）
+#define IDUpdateBlockProperties 134 // 更新方块属性（服务端 -> 客户端）
 #define IDClientCacheBlobStatus 135 // 客户端缓存块状态（客户端 -> 服务端）
 #define IDClientCacheMissResponse 136 // 客户端缓存未命中响应（服务端 -> 客户端）
 #define IDEducationSettings 137    // 教育设置（服务端 -> 客户端）
@@ -203,10 +209,11 @@
 #define IDClientCheatAbility 197   // 客户端作弊能力（客户端 -> 服务端）
 #define IDCameraPresets 198        // 相机预设（服务端 -> 客户端）
 #define IDUnlockedRecipes 199      // 已解锁配方（服务端 -> 客户端）
+
 #define IDPyRpc 200                // Python远程过程调用（客户端 -> 服务端）
 #define IDChangeModel 201          // 改变模型（服务端 -> 客户端）
-#define IDStoreBuySucc 202         // 商店购买成功（服务端 -> 客户端）
-#define IDNeteaseJson 203          // 网易 JSON（客户端 -> 服务端）
+#define IDStoreBuySucc 202         // 商店购买成功（客户端 -> 服务端）
+#define IDNeteaseJson 203          // 网易 JSON（客户端 <-> 服务端）
 #define IDChangeModelTexture 204   // 改变模型纹理（服务端 -> 客户端）
 #define IDChangeModelOffset 205    // 改变模型偏移（服务端 -> 客户端）
 #define IDChangeModelBind 206      // 改变模型绑定（服务端 -> 客户端）
@@ -214,7 +221,11 @@
 #define IDSetDimensionLocalTime 208 // 设置维度本地时间（服务端 -> 客户端）
 #define IDWithdrawFurnaceXp 209    // 提取熔炉经验（客户端 -> 服务端）
 #define IDSetDimensionLocalWeather 210 // 设置维度本地天气（服务端 -> 客户端）
-#define IDCustomV1 223             // 自定义 V1（服务端 -> 客户端）
+#define IDRequestReplayRecordStatus 211 // 回放录制状态请求
+#define IDClientInputRecord 212    // 客户端输入录制
+#define IDClientAdditionalReplaySaveData 213 // 客户端附加回放存档数据
+#define IDClientLocalReplayOperations 214 // 客户端本地回放操作
+#define IDAddiction 223             // 网易防沉迷（客户端 -> 服务端）
 #define IDCombine 224              // 组合（服务端 -> 客户端）
 #define IDVConnection 225          // V 连接（服务端 -> 客户端）
 #define IDTransport 226            // 传输（服务端 -> 客户端）
@@ -225,11 +236,74 @@
 #define IDMobBlockActorChanged 231 // 生物方块实体改变（服务端 -> 客户端）
 #define IDChangeActorMotion 232    // 改变实体运动（服务端 -> 客户端）
 #define IDAnimateEmoteEntity 233   // 动画表情实体（服务端 -> 客户端）
+#define IDChangeBiome 234          // 改变生物群系（服务端 -> 客户端）
+#define IDUpdateBiome 235          // 更新生物群系（服务端 -> 客户端）
+#define IDSyncSkin 236             // 同步皮肤（服务端 <-> 客户端）
+
+#define IDBatch 254                // 批量包（= RakNetID 0xfe，外层封装）
+#define IDSendZipFiles 255         // 发送 ZIP 文件
+
 #define IDCameraInstruction 300    // 相机指令（服务端 -> 客户端）
 #define IDCompressedBiomeDefinitionList 301 // 压缩生物群系定义列表（服务端 -> 客户端）
 #define IDTrimData 302             // 修剪数据（服务端 -> 客户端）
 #define IDOpenSign 303             // 打开标志（服务端 -> 客户端）
 #define IDAgentAnimation 304       // 代理动画（服务端 -> 客户端）
+#define IDRefreshEntitlements 305  // 刷新权益（客户端 -> 服务端）
+#define IDToggleCrafterSlotRequest 306 // 切换工匠台槽位请求（客户端 -> 服务端）
+#define IDSetPlayerInventoryOptions 307 // 设置玩家背包选项（服务端 <-> 客户端）
+#define IDSetHud 308               // 设置 HUD（服务端 -> 客户端）
+#define IDAwardAchievement 309     // 授予成就（服务端 -> 客户端）
+#define IDClientboundCloseForm 310 // 服务端关闭表单（服务端 -> 客户端）
+#define IDClientboundLoadingScreen 311 // 客户端加载屏幕（旧版，已废弃）
+#define IDServerboundLoadingScreen 312 // 客户端加载屏幕（客户端 -> 服务端）
+#define IDJigsawStructureData 313  // 拼图结构数据（服务端 -> 客户端）
+#define IDCurrentStructureFeature 314 // 当前结构特征（服务端 -> 客户端）
+#define IDServerboundDiagnostics 315 // 客户端诊断信息（客户端 -> 服务端）
+#define IDCameraAimAssist 316      // 相机瞄准辅助（服务端 -> 客户端）
+#define IDContainerRegistryCleanup 317 // 容器注册表清理（服务端 -> 客户端）
+#define IDMovementEffect 318       // 移动效果（服务端 -> 客户端）
+#define IDSetMovementAuthority 319 // 设置移动权限（服务端 -> 客户端）
+#define IDCameraAimAssistPresets 320 // 相机瞄准辅助预设（服务端 -> 客户端）
+#define IDCameraAimAssistInstruction 321 // 相机瞄准辅助指令（客户端 -> 服务端）
+#define IDMovementPredictionSync 322 // 移动预测同步（客户端 -> 服务端）
+#define IDUpdateClientOptions 323  // 更新客户端选项（客户端 -> 服务端）
+#define IDPlayerVideoCapture 324   // 玩家视频录制（服务端 -> 客户端）
+#define IDPlayerUpdateEntityOverrides 325 // 玩家更新实体覆盖（服务端 -> 客户端）
+#define IDPlayerLocation 326       // 玩家位置（服务端 <-> 客户端）
+#define IDClientboundControlSchemeSet 327 // 服务端设置控制方案（服务端 -> 客户端）
+#define IDDebugDrawer 328          // 调试绘制（服务端 -> 客户端）
+#define IDServerboundPackSettingChange 329 // 客户端资源包设置变更（客户端 -> 服务端）
+#define IDClientboundDataStore 330 // 客户端数据存储（服务端 -> 客户端） [协议 v898 起]
+#define IDGraphicsParameterOverride 331 // 图形参数覆盖（服务端 -> 客户端）
+#define IDServerboundDataStore 332 // 服务端数据存储（客户端 -> 服务端） [协议 v898 起]
+#define IDClientboundDataDrivenUIShowScreen 333 // 数据驱动 UI 显示界面（服务端 -> 客户端） [协议 v924 起]
+#define IDClientboundDataDrivenUICloseScreen 334 // 数据驱动 UI 关闭界面（服务端 -> 客户端） [协议 v924 起]
+#define IDClientboundDataDrivenUIReload 335 // 数据驱动 UI 重载（服务端 -> 客户端） [协议 v924 起]
+#define IDClientboundTextureShift 336 // 客户端纹理偏移（服务端 -> 客户端） [协议 v924 起]
+#define IDVoxelShapes 337          // 体素形状（服务端 -> 客户端） [协议 v924 起]
+#define IDCameraSpline 338         // 相机样条曲线（服务端 -> 客户端） [协议 v924 起]
+#define IDCameraAimAssistActorPriority 339 // 相机瞄准辅助实体优先级（服务端 -> 客户端） [协议 v924 起]
+#define IDResourcePacksReadyForValidation 340 // 资源包待校验（客户端 -> 服务端） [协议 v944 起]
+#define IDLocatorBar 341           // 定位条（服务端 -> 客户端） [协议 v944 起]
+#define IDPartyChanged 342         // 队伍变更（客户端 -> 服务端） [协议 v944 起]
+#define IDServerboundDataDrivenScreenClosed 343 // 客户端数据驱动界面已关闭（客户端 -> 服务端） [协议 v944 起]
+#define IDSyncWorldClocks 344      // 同步世界时钟（服务端 -> 客户端） [协议 v944 起]
+#define IDClientboundAttributeLayerSync 345 // 客户端属性层同步（服务端 -> 客户端） [协议 v944 起]
+#define IDServerStoreInfo 346      // 服务器商店信息（服务端 -> 客户端） [协议 v975 起]
+#define IDServerPresenceInfo 347   // 服务器在线状态信息（服务端 -> 客户端） [协议 v975 起]
+#define IDClientboundUpdateSoundData 348 // 客户端更新声音数据（服务端 -> 客户端） [协议 v1001 起]
+#define IDSendPartyDestinationCookie 349 // 发送队伍目标 Cookie（服务端 -> 客户端） [协议 v1001 起]
+#define IDPartyDestinationCookieResponse 350 // 队伍目标 Cookie 响应（客户端 -> 服务端） [协议 v1001 起]
+#define IDSetPlayerFurnaceOptions 351 // 设置玩家熔炉选项（服务端 <-> 客户端） [协议 v2193 起]
+#define IDRecordStarted 352        // 录制开始（服务端 -> 客户端） [协议 v2193 起]
+#define IDClientboundMatchmakingState 353 // 客户端匹配状态（服务端 -> 客户端） [协议 v2225 起]
+#define IDServerboundStonecutterSetRecipe 354 // 客户端切石机设置配方（客户端 -> 服务端） [协议 v2225 起]
+#define IDClientboundStonecutterSetRecipe 355 // 服务端切石机设置配方（服务端 -> 客户端） [协议 v2225 起]
+#define IDServerboundMatchmakingCancel 356 // 客户端取消匹配（客户端 -> 服务端） [协议 v2225 起]
+#define IDSetPassengerOfBlock 357  // 设置方块上的乘客（服务端 <-> 客户端） [协议 v2225 起]
+#define IDServerboundCursorItemDrag 358 // 客户端光标物品拖拽（客户端 -> 服务端） [协议 v2225 起]
+#define IDClientboundPlayAudioContent 359 // 客户端播放音频内容（服务端 -> 客户端） [协议 v2225 起]
+#define IDServerboundRegisterAudioContent 360 // 服务端注册音频内容（客户端 -> 服务端） [协议 v2225 起]
 
 
 #define PyRpcClientID 0x05db23ae
@@ -238,7 +312,7 @@
 class PacketBase
 {
 public:
-	virtual unsigned char ID();
+	virtual uint32_t ID();
 	virtual std::vector<unsigned char> Serializ();
 	virtual void Deserializ(std::vector<unsigned char> pack);
 	static size_t calculateVarintSizeFast(int32_t value) {

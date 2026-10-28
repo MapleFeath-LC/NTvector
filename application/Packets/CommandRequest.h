@@ -25,7 +25,7 @@ class CommandRequest :
     public PacketBase
 {
 public:
-	unsigned char ID() override;
+	uint32_t ID() override;
 	std::vector<unsigned char> Serializ() override;
 
     void SetCommand(std::string value) { m_command = std::move(value); }

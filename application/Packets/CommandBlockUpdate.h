@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "PacketBase.h"
 
 // 命令方块模式常量
@@ -19,7 +19,7 @@ struct BlockPos {
 class CommandBlockUpdate : public PacketBase
 {
 public:
-    unsigned char ID() override;
+    uint32_t ID() override;
     void Deserializ(std::vector<unsigned char> pack) override;
     std::vector<unsigned char> Serializ() override;
 

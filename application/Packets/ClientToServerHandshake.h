@@ -3,7 +3,7 @@
 class ClientToServerHandshake :
     public PacketBase
 {
-	unsigned char ID() override;
+	uint32_t ID() override;
 	std::vector<unsigned char> Serializ() override;
 };
 

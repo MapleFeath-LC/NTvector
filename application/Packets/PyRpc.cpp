@@ -1,7 +1,7 @@
 #include "PyRpc.h"
 #include "Logger.h"
 
-unsigned char PyRpc::ID()
+uint32_t PyRpc::ID()
 {
     return IDPyRpc;
 }
@@ -9,20 +9,18 @@ unsigned char PyRpc::ID()
 void PyRpc::Deserializ(std::vector<unsigned char> pack)
 {
     BinaryReader br(pack.data(), pack.size());
-    //unknow = br.ReadUInt8();
     int lengt = br.ReadVarInt();
-    rpcdata = string((char*)br.Read(lengt), lengt);
-    RpcHeader = br.ReadUInt32();
+    Data = string((char*)br.Read(lengt), lengt);
+    MsgID = br.ReadUInt32();
 }
 
 std::vector<unsigned char> PyRpc::Serializ()
 {
-    int chainsize = rpcdata.size();
+    int chainsize = Data.size();
     BinaryWriter bw(chainsize + 10);
-    bw.WriteUInt8(ID());
-    bw.WriteUInt8(1);
+    bw.WriteVarUInt32(ID());
     bw.WriteVarUInt(chainsize);
-    bw.Write(rpcdata.data(), chainsize);
+    bw.Write(Data.data(), chainsize);
     bw.WriteUInt32(PyRpcClientID);
     return bw.vect();
 }

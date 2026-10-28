@@ -23,7 +23,7 @@ void writeUuid(BinaryWriter& bw, const std::string& uuid)
 }
 }
 
-unsigned char CommandRequest::ID()
+uint32_t CommandRequest::ID()
 {
     return IDCommandRequest;
 }
@@ -31,7 +31,7 @@ unsigned char CommandRequest::ID()
 std::vector<unsigned char> CommandRequest::Serializ()
 {
     BinaryWriter bw(m_command.size() + m_requestID.size() + 64);
-    bw.WriteUInt8(ID());
+    bw.WriteVarUInt32(ID());
     bw.WriteStringUTF(m_command);
     bw.WriteVarInt(static_cast<char>(m_commandOrigin));
     writeUuid(bw, m_randomUUID);

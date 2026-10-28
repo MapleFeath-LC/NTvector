@@ -70,7 +70,7 @@ namespace pkt_io {
 class InventoryContent : public PacketBase
 {
 public:
-    unsigned char ID() override
+    uint32_t ID() override
     {
         return IDInventoryContent;
     }

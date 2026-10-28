@@ -4,11 +4,11 @@ class NetworkSettings :
     public PacketBase
 {
 public:
-	unsigned char ID() override;
+	uint32_t ID() override;
 	void Deserializ(std::vector<unsigned char> pack) override;
 	uint16_t CompressionThreshold;
 	uint16_t CompressionAlgorithm;
-	bool ClientThrottle;
+	bool ClientThrottleEnabled;
 	uint8_t ClientThrottleThreshold;
 	float ClientThrottleScalar;
 };

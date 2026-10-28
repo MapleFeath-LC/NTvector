@@ -71,7 +71,6 @@ void assertAddPacket(const PlayerListPacket& packet)
     assert(entry.Username == "ProtocolTest");
     assert(entry.BuildPlatform == -7);
     assert(entry.PlayerColor == 0x12345678);
-    assert(entry.Unknown == entry.PlayerColor);
     assert(entry.Skin.SkinImage.Width == 64);
     assert(entry.Skin.SkinImage.Data == std::vector<uint8_t>({1, 2, 3}));
     assert(entry.Skin.Animations.size() == 1);

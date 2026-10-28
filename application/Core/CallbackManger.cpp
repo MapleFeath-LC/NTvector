@@ -1,4 +1,4 @@
-﻿#include "CallbackManager.h"
+#include "CallbackManager.h"
 #include "ClientInstance.h"
 #include "SubChunkClient.h"
 #include "PlayStatus.h"
@@ -7,6 +7,7 @@
 #include "BlockActorData.h"
 #include "BlockDataStore.h"
 #include "EntityStateStore.h"
+#include "VectorConsole.h"
 
 extern unsigned int MinecraftBedrockProtocolVersion;
 void CallbackManager::onNetworkSetting(ConnectInstance* m_session, std::vector<uint8_t> packet) {
@@ -18,19 +19,18 @@ void CallbackManager::onNetworkSetting(ConnectInstance* m_session, std::vector<u
     if (ns.CompressionAlgorithm == 0) {
         LOG(LOG_NETWORK, "[Callback] Using Zlib compression algorithm");
         m_session->setCompressionAlgorithm(std::make_unique<ZlibCompress>());
+        m_session->setNetworkSettingEnabled(true);
     }
     else if (ns.CompressionAlgorithm == 2) {
         LOG(LOG_NETWORK, "[Callback] Using Zlib Stream compression algorithm");
         m_session->setCompressionAlgorithm(std::make_unique<ZlibStreamCompressor>());
+        m_session->setNetworkSettingEnabled(true);
     }
     else
     {
-        LOG(LOG_WARN, "[Callback] Unknown compression algorithm: ", ns.CompressionAlgorithm, ", defaulting to Zlib");
-        m_session->setCompressionAlgorithm(std::make_unique<ZlibCompress>());
-        Logger::getInstance().log(LOG_ERROR, " Unknown compression algorithm.");
+        LOG(LOG_NETWORK, "[Callback] Compression disabled (algorithm ", ns.CompressionAlgorithm, ")");
+        m_session->setNoCompression(true);
     }
-    m_session->setNetworkSettingEnabled(true);
-    LOG(LOG_NETWORK, "[Callback] Network settings applied, compression enabled");
 
     LoginPacket lp;
     lp.chain = m_session->chain;
@@ -105,9 +105,8 @@ void CallbackManager::onPlayStatus(ConnectInstance* m_session, std::vector<uint8
         return;
     }
     ClientCacheStatus cth;
-    cth.Enabled = true;
-    cth.Unknow = false;
-    LOG(LOG_SERVER, "[Callback] Sending ClientCacheStatus (Enabled=true)");
+    cth.Supported = false;
+    LOG(LOG_SERVER, "[Callback] Sending ClientCacheStatus (supported=false)");
     m_session->WritePacket(cth);
     PythonEventEngine engine;
     engine.trigger("on_play_status", ps.Status);
@@ -133,13 +132,12 @@ void CallbackManager::onStartGame(ConnectInstance* m_session, std::vector<uint8_
     LOG(LOG_SERVER, "[Callback] onStartGame - Received start game packet, size: ", packet.size());
     StartGame sg;
     sg.Deserializ(packet);
-    Params::PlayerEntityID = ~sg.playerEntityID >> 1;
+    Params::PlayerEntityID = sg.playerEntityID;
     m_session->getClientInstance()->getLocalPlayer()->SetServerState(
         sg.EntityRuntimeID, sg.PlayerPosition, sg.Pitch, sg.Yaw);
     EntityStateStore::StoreWorld(sg);
     LOG(LOG_INFO, "[Callback] Player Entity ID assigned: ", sg.playerEntityID);
     NeteaseJson nj;
-    nj.Unknow = true;
     string json;
     Json::Value root;
     Json::FastWriter fw;
@@ -164,14 +162,12 @@ void CallbackManager::onStartGame(ConnectInstance* m_session, std::vector<uint8_
         m_session->WritePacket(rcr);
     }
 
-    RequestAbility ra;
-    ra.unknown = 2;
-    ra.unknown2 = 2;
-    ra.unknown3 = 0;
-    m_session->WritePacket(ra);
+    ServerboundLoadingScreen loadingScreen;
+    loadingScreen.action = ServerboundLoadingScreen::Action::START_LOADING_SCREEN;
+    m_session->WritePacket(loadingScreen);
     TickSync ts;
     ts.ClientRequestTick = 0;
-    ts.ClientRequestTick = 0;
+    ts.ServerReceptionTick = 0;
     m_session->WritePacket(ts);
     LOG(LOG_SCRIPTING, "[Callback] Triggering Python 'start_game' event");
     PythonEventEngine engine;
@@ -188,7 +184,6 @@ void CallbackManager::onStartGameEvent(ConnectInstance* m_session, std::vector<u
         sg.EntityRuntimeID, sg.PlayerPosition, sg.Pitch, sg.Yaw);
     LOG(LOG_INFO, "[Callback] Player Entity ID assigned: ", sg.playerEntityID);
     NeteaseJson nj;
-    nj.Unknow = true;
     string json;
     Json::Value root;
     Json::FastWriter fw;
@@ -211,14 +206,12 @@ void CallbackManager::onStartGameEvent(ConnectInstance* m_session, std::vector<u
     LOG(LOG_SERVER, "[Callback] Sending RequestChunkRadius (Chunk=6, Max=12)");
     m_session->WritePacket(rcr);
 
-    RequestAbility ra;
-    ra.unknown = 2;
-    ra.unknown2 = 2;
-    ra.unknown3 = 0;
-    m_session->WritePacket(ra);
+    ServerboundLoadingScreen loadingScreen;
+    loadingScreen.action = ServerboundLoadingScreen::Action::START_LOADING_SCREEN;
+    m_session->WritePacket(loadingScreen);
     TickSync ts;
     ts.ClientRequestTick = 0;
-    ts.ClientRequestTick = 0;
+    ts.ServerReceptionTick = 0;
     m_session->WritePacket(ts);
     LOG(LOG_SCRIPTING, "[Callback] Triggering Python 'start_game' event");
     LOG(LOG_INFO, "[Callback] Game started successfully!");
@@ -230,8 +223,8 @@ void CallbackManager::onPyRpc(ConnectInstance* m_session, std::vector<uint8_t> p
     PythonEventEngine engine;
     PyRpc rpc;
     rpc.Deserializ(packet);
-    LOG(LOG_SCRIPTING, "[Callback] Triggering Python 'on_rpc' event, data size: ", rpc.rpcdata.size());
-    engine.triggerBytes("on_rpc", rpc.rpcdata);
+    LOG(LOG_SCRIPTING, "[Callback] Triggering Python 'on_rpc' event, data size: ", rpc.Data.size());
+    engine.triggerBytes("on_rpc", rpc.Data);
 }
 
 void CallbackManager::onDisconnect(ConnectInstance* m_session, std::vector<uint8_t> packet)
@@ -243,7 +236,7 @@ void CallbackManager::onDisconnect(ConnectInstance* m_session, std::vector<uint8
     m_session->getClientInstance()->getLocalPlayer()->Reset();
     EntityStateStore::Clear();
     LOG(LOG_ERROR, "[Callback] Disconnect reason: ", d.message);
-    cout << "disconnect: " << WindowsEncodingConverter::utf8ToGbk(d.message) << '\n';
+    VectorConsole::AppendLog("disconnect: " + d.message);
     PythonEventEngine engine;
     engine.trigger("on_disconnect", d.message);
     if (Params::disout) {
@@ -261,7 +254,7 @@ void CallbackManager::onDisconnectEvent(ConnectInstance* m_session, std::vector<
     m_session->getClientInstance()->getLocalPlayer()->Reset();
     EntityStateStore::Clear();
     LOG(LOG_ERROR, "[Callback] Disconnect reason: ", d.message);
-    cout << "disconnect: " << WindowsEncodingConverter::utf8ToGbk(d.message) << '\n';
+    VectorConsole::AppendLog("disconnect: " + d.message);
     PythonEventEngine engine;
     engine.trigger("on_disconnect_event", d.message);
     m_session->Disconnect();
@@ -274,9 +267,9 @@ void CallbackManager::onText(ConnectInstance* m_session, std::vector<uint8_t> pa
     PythonEventEngine engine;
     Text rpc;
     rpc.Deserializ(packet);
-    LOG(LOG_INFO, "[Callback] Text message type: ", (int)rpc.type);
+    LOG(LOG_INFO, "[Callback] Text message type: ", (int)rpc.Type);
     LOG(LOG_SCRIPTING, "[Callback] Triggering Python 'on_text' event");
-    engine.trigger("on_text", rpc.type, rpc._data, rpc._data2);
+    engine.trigger("on_text", rpc.Type, rpc.SourceName, rpc.Message);
 }
 void CallbackManager::onAddPlayer(ConnectInstance* m_session, std::vector<uint8_t> packet)
 {
@@ -305,7 +298,7 @@ void CallbackManager::onIDCommandOutput(ConnectInstance* m_session, std::vector<
     std::vector<std::string> strings;
     for (size_t i = 0; i < co.OutputMessages.size(); i++)
     {
-        strings.push_back(co.OutputMessages[i].Message);
+        strings.push_back(co.OutputMessages[i].MessageID);
     }
     engine.trigger("on_command_output", co);
 }
