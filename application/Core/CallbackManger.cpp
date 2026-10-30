@@ -262,14 +262,19 @@ void CallbackManager::onDisconnectEvent(ConnectInstance* m_session, std::vector<
 
 void CallbackManager::onText(ConnectInstance* m_session, std::vector<uint8_t> packet)
 {
-    //cout << Easy::StringToHex(string((char*)packet.data(), packet.size())) << endl;
     LOG(LOG_SERVER, "[Callback] onText - Received text packet, size: ", packet.size());
-    PythonEventEngine engine;
     Text rpc;
     rpc.Deserializ(packet);
-    LOG(LOG_INFO, "[Callback] Text message type: ", (int)rpc.Type);
-    LOG(LOG_SCRIPTING, "[Callback] Triggering Python 'on_text' event");
-    engine.trigger("on_text", rpc.Type, rpc.SourceName, rpc.Message);
+    PythonEventEngine engine;
+    engine.trigger("TextParsed",
+        (int)rpc.Type,
+        rpc.SourceName,
+        rpc.Message,
+        rpc.Parameters,
+        rpc.XUID,
+        rpc.PlatformChatID,
+        rpc.FilteredMessage,
+        rpc.NeedsTranslation);
 }
 void CallbackManager::onAddPlayer(ConnectInstance* m_session, std::vector<uint8_t> packet)
 {
@@ -289,18 +294,17 @@ void CallbackManager::onDeathInfo(ConnectInstance* m_session, std::vector<uint8_
     LOG(LOG_ENTITY, "[Callback] onDeathInfo - Received death info packet, size: ", packet.size());
 }
 void CallbackManager::onIDCommandOutput(ConnectInstance* m_session, std::vector<uint8_t> packet) {
-    //std::cout << Easy::StringToHex(std::string((char*)packet.data(), packet.size())) << '\n';
     LOG(LOG_SERVER, "[Callback] onIDCommandOutput - Received command output packet, size: ", packet.size());
     CommandOutput co;
     co.Deserializ(packet);
-    LOG(LOG_INFO, "[Callback] Command output received, triggering Python event");
     PythonEventEngine engine;
-    std::vector<std::string> strings;
-    for (size_t i = 0; i < co.OutputMessages.size(); i++)
-    {
-        strings.push_back(co.OutputMessages[i].MessageID);
-    }
-    engine.trigger("on_command_output", co);
+    std::vector<uint8_t> guid(co.Origin.UUID.begin(), co.Origin.UUID.end());
+    engine.trigger("CommandOutputParsed",
+        co.OutputMessages,
+        guid,
+        (int)co.OutputType,
+        (int)co.SuccessCount,
+        co.DataSet);
 }
 
 void CallbackManager::onIDMovePlayer(ConnectInstance* m_session, std::vector<uint8_t> data)

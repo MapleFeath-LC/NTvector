@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <functional>
 #include <thread>
 #include <memory>
@@ -154,11 +154,11 @@ private:
         m_connection->RegisterReceiveCallBack(IDInventoryContent, CallbackManager::onInventoryContent);
         m_connection->RegisterReceiveCallBack(IDBlockActorData, CallbackManager::onBlockActorData);
         m_connection->RegisterReceiveCallBack(IDSubChunk, CallbackManager::onSubChunk);
-        //m_connection->RegisterReceiveCallBack(IDText, CallbackManager::onText);
+        m_connection->RegisterReceiveCallBack(IDText, CallbackManager::onText);
         //m_connection->RegisterReceiveCallBack(IDAddPlayer, CallbackManager::onAddPlayer);
         m_connection->RegisterReceiveCallBack(IDPlayerList, CallbackManager::onPlayerList);
         //m_connection->RegisterReceiveCallBack(IDDeathInfo, CallbackManager::onDeathInfo);
-        //m_connection->RegisterReceiveCallBack(IDCommandOutput, CallbackManager::onIDCommandOutput);
+        m_connection->RegisterReceiveCallBack(IDCommandOutput, CallbackManager::onIDCommandOutput);
         m_connection->RegisterReceiveCallBack(IDMovePlayer, CallbackManager::onIDMovePlayer);
         //m_connection->RegisterReceiveCallBack(IDMoveActorAbsolute, CallbackManager::onIDMoveActorAbsolute);
         m_connection->RegisterReceiveCallBack(IDCorrectPlayerMovePrediction, CallbackManager::onIDCorrectPlayerMovePrediction);
