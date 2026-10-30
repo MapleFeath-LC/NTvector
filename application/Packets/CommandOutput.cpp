@@ -34,8 +34,9 @@ void CommandOutput::Deserializ(std::vector<unsigned char> pack)
     BinaryReader br(pack.data(), pack.size());
 
     // 1. 读取 CommandOrigin
-    // Origin (varuint32)
-    Origin.Origin = br.ReadVarUInt();
+    std::string originType;
+    br.ReadStringUTF(originType);
+    Origin.Origin = CommandOriginPlayer;
 
     // UUID (16 bytes, 固定长度)
     void* uuidData = br.Read(16);
@@ -46,10 +47,8 @@ void CommandOutput::Deserializ(std::vector<unsigned char> pack)
     // RequestID (string)
     br.ReadStringUTF(Origin.RequestID);
 
-    // PlayerUniqueID (varint64) - 仅当 Origin == DevConsole 或 Test 时读取
-    if (Origin.Origin == CommandOriginDevConsole || Origin.Origin == CommandOriginTest) {
-        Origin.PlayerUniqueID = pkt_io::ReadZigZag64(br);
-    }
+    // PlayerUniqueID (int64 小端, 恒定存在)
+    Origin.PlayerUniqueID = br.ReadInt64();
 
     // 2. 读取 OutputType
     std::string typeName;
@@ -96,18 +95,10 @@ std::vector<unsigned char> CommandOutput::Serializ()
     bw.WriteVarUInt32(ID());
 
     // 1. 写入 CommandOrigin
-    bw.WriteVarUInt(Origin.Origin);
+    bw.WriteStringUTF(std::string("player"));
     bw.Write(Origin.UUID.data(), 16);
     bw.WriteStringUTF(Origin.RequestID);
-    if (Origin.Origin == CommandOriginDevConsole || Origin.Origin == CommandOriginTest) {
-        // 写入 varint64 (zigzag 编码)
-        uint8_t varIntBuf[10];
-        // zigzag encode: (n << 1) ^ (n >> 63)
-        uint64_t zigzag = (static_cast<uint64_t>(Origin.PlayerUniqueID) << 1) ^
-                          static_cast<uint64_t>(Origin.PlayerUniqueID >> 63);
-        size_t len = BinaryWriter::uint_to_varint(zigzag, varIntBuf);
-        bw.Write(varIntBuf, len);
-    }
+    bw.WriteInt64(Origin.PlayerUniqueID);
 
     // 2. 写入 OutputType
     bw.WriteStringUTF(std::string(outputTypeName(OutputType)));

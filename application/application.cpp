@@ -416,6 +416,8 @@ int main(int argc, char* argv[])
                 client_data = MinecraftClientDataUtils::GetClientData(skin_data_path, skin_model_path, operator_name);
             }
         }
+        ConfigLoader::SkinData = MinecraftClientDataUtils::ForceGameVersion(ConfigLoader::SkinData);
+        client_data = MinecraftClientDataUtils::ForceGameVersion(client_data);
         LOG(LOG_SCRIPTING, "[Main] Initialize ClientInstance.");
         g_client_instance = new ClientInstance();
 

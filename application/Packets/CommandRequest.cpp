@@ -2,12 +2,8 @@
 
 namespace {
 constexpr size_t CommandUuidSize = 16;
+constexpr const char* OriginPlayer = "player";
 constexpr const char* CommandVersionLatest = "latest";
-
-bool needsPlayerId(CommandOriginType originType)
-{
-    return originType == CommandOriginType::DevConsole || originType == CommandOriginType::Test;
-}
 
 void writeUuid(BinaryWriter& bw, const std::string& uuid)
 {
@@ -31,14 +27,10 @@ std::vector<unsigned char> CommandRequest::Serializ()
     BinaryWriter bw(m_command.size() + m_requestID.size() + 64);
     bw.WriteVarUInt32(ID());
     bw.WriteStringUTF(m_command);
-    bw.WriteVarInt(static_cast<char>(m_commandOrigin));
+    bw.WriteStringUTF(std::string(OriginPlayer));
     writeUuid(bw, m_randomUUID);
     bw.WriteStringUTF(m_requestID);
-
-    if (needsPlayerId(m_commandOrigin)) {
-        bw.WriteVarInt64(m_playerID);
-    }
-
+    bw.WriteInt64(m_playerID < 0 ? 0 : m_playerID);
     bw.WriteBool(m_internalSource);
     bw.WriteBool(m_unlimit);
     bw.WriteStringUTF(std::string(CommandVersionLatest));

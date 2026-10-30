@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <sstream>
 #include <json/json.h>
 #include <random>
 #include "Base64Cpp.h"
@@ -12,6 +13,25 @@ extern std::string MinecraftBedrockGameVersion;
 class MinecraftClientDataUtils
 {
 public:
+    static std::string ForceGameVersion(const std::string& json) {
+        if (json.empty()) {
+            return json;
+        }
+        Json::CharReaderBuilder reader;
+        Json::Value root;
+        std::string errs;
+        std::istringstream stream(json);
+        if (!Json::parseFromStream(reader, stream, &root, &errs) || !root.isObject()) {
+            Logger::getInstance().logv(LOG_WARN, "[skin] client data is not a JSON object, GameVersion left as is.");
+            return json;
+        }
+        root["GameVersion"] = MinecraftBedrockGameVersion;
+        Json::StreamWriterBuilder writer;
+        writer["indentation"] = "";
+        writer["emitUTF8"] = true;
+        return Json::writeString(writer, root);
+    }
+
     static std::string GetClientData(std::string skin_path, std::string model_path, std::string player_name) {
         std::random_device rd;
         std::mt19937_64 gen(rd());
